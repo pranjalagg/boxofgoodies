@@ -102,14 +102,14 @@ const b64decode = (s) => {
 
 const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 const fmtWhen = (d) => d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-// Value for a datetime-local input, in the viewer's own timezone.
-const localInputValue = (d) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 function countdown(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const d = Math.floor(s / 86400), hh = Math.floor((s % 86400) / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
   const clock = `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
   return d ? `${d} ${d === 1 ? 'day' : 'days'}, ${clock}` : clock;
 }
+// Value for a datetime-local input, in the viewer's own timezone.
+const localInputValue = (d) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
 let clientP;
 function getClient() {
@@ -505,6 +505,15 @@ function showViewer(pkg, { preview = false } = {}) {
   };
 
   parcel.onclick = () => {
+    // Still sealed: rattle the box instead of opening it.
+    if (parcel.classList.contains('sealed')) {
+      parcel.classList.remove('nope');
+      void parcel.offsetWidth; // restart the animation
+      parcel.classList.add('nope');
+      setTimeout(() => parcel.classList.remove('nope'), 450); // back to floating
+      toast(`not yet! it opens ${fmtWhen(until)}`);
+      return;
+    }
     parcel.classList.add('open');
     parcel.disabled = true;
     if (!preview) markOpened(pkg);
@@ -522,13 +531,12 @@ function showViewer(pkg, { preview = false } = {}) {
   // Sealed: show the sticker and a live countdown. With a backend the contents aren't
   // even here yet (pkg.sealed); they're fetched once the time comes.
   parcel.classList.add('sealed');
-  parcel.dataset.until = fmtWhen(until);
-  parcel.disabled = true;
+  parcel.disabled = false;
   const tick = () => {
     const left = until - Date.now();
     if (left > 0) { tap.textContent = `opens in ${countdown(left)}`; return; }
     clearInterval(sealTimer);
-    if (pkg.sealed) refetch();
+    if (pkg.sealed) { parcel.disabled = true; refetch(); }
     else unseal();
   };
   tick();

@@ -261,16 +261,25 @@ dialog[open] { animation: rise .25s ease-out; }
 
 .parcel.open { animation: none; }
 
-/* sealed until a date: a "do not open" sticker across the box */
-.parcel.sealed::after {
-  content: "DO NOT OPEN UNTIL\A" attr(data-until);
-  white-space: pre; position: absolute; left: 50%; top: 4%; z-index: 3;
-  transform: translateX(-50%) rotate(-5deg);
-  padding: 5px 10px; border: 2px solid var(--red); border-radius: 6px; background: #fff8f2;
-  font: 700 11px/1.35 var(--mono); letter-spacing: .06em; color: var(--red-ink); text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,.15);
+/* sealed until a date: red "do not open" packing tape across the box, countdown card below */
+.parcel.sealed .p-front::after {
+  content: "DO NOT OPEN  ✕  DO NOT OPEN  ✕  DO NOT OPEN  ✕  DO NOT OPEN  ✕  DO NOT OPEN";
+  position: absolute; left: -9%; right: -9%; top: 3%; z-index: 2;
+  height: 26px; line-height: 24px; overflow: hidden; white-space: pre; text-align: center;
+  background: #c8372f; color: #fff4ea; font: 700 12px var(--mono); letter-spacing: .1em;
+  border-top: 1px solid rgba(255, 255, 255, .35); border-bottom: 1px solid rgba(0, 0, 0, .2);
+  box-shadow: 0 3px 5px rgba(60, 10, 0, .3);
+  transform: rotate(-4deg);
 }
 .parcel.sealed { animation-duration: 6s; }
+.parcel.nope { animation: nope .45s ease-in-out; }
+@keyframes nope {
+  20% { transform: translateX(-7px) rotate(-2deg); }
+  40% { transform: translateX(6px) rotate(1.5deg); }
+  60% { transform: translateX(-4px) rotate(-1deg); }
+  80% { transform: translateX(2px); }
+}
+
 #skipWait { margin-top: 10px; font-size: 12px; }
 
 /* sender's tracking page */
