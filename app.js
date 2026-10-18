@@ -361,7 +361,7 @@ async function generate() {
     $('#trackout').hidden = !trackLink;
     $('#linkout').hidden = false;
     $('#linkfield').select();
-    toast('your package is ready to send');
+    toast('sealed, stamped, ready to ship');
   } catch (e) {
     console.error(e);
     toast(`couldn't pack it: ${e.message || e}`);
@@ -477,6 +477,7 @@ function showViewer(pkg, { preview = false } = {}) {
   window.scrollTo(0, 0);
 
   $('#mTo').textContent = pkg.to || 'you';
+  $('#ymail').textContent = pkg.to ? `special delivery for ${pkg.to}` : 'special delivery';
   $('#mFrom').textContent = pkg.from || 'someone who cares';
   $('#vfoot').textContent = pkg.id && !preview ? 'the sender will see when this package is opened' : 'made with care';
 
@@ -724,7 +725,7 @@ async function boot() {
     showViewer(pkg);
   } catch (e) {
     console.error(e);
-    $('#tap').textContent = "hmm, this package got lost in the mail";
+    $('#tap').textContent = 'this one got lost in the post. we blame the pigeons.';
     $('#vback').textContent = 'Make your own';
   }
 }
