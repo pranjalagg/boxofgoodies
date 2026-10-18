@@ -37,6 +37,32 @@ const TYPES = {
     ],
     validate: (d) => (d.file || d.url ? '' : 'add a video file or a link'),
   },
+  gift: {
+    label: 'Gift',
+    fields: [
+      { k: 'url', label: 'Gift card / e-gift link', type: 'url', ph: 'https://…', req: true },
+      { k: 'note', label: 'Note', type: 'textarea', ph: 'treat yourself (on me)', max: 300 },
+    ],
+  },
+  voice: {
+    label: 'Voice',
+    fields: [{ k: 'file', label: 'Voice note (up to 2 minutes)', type: 'record', maxSec: 120, maxMB: 10, req: true, reqMsg: 'record something first' }],
+  },
+  drawing: {
+    label: 'Drawing',
+    fields: [
+      { k: 'file', label: 'Draw something', type: 'draw', req: true, reqMsg: 'draw something first' },
+      { k: 'caption', label: 'Caption', ph: 'a masterpiece, obviously', max: 120 },
+    ],
+  },
+  location: {
+    label: 'Location',
+    fields: [
+      { k: 'name', label: 'Place name', ph: 'the bench by the river', req: true, max: 80 },
+      { k: 'url', label: 'Map link (Google Maps, Apple Maps…)', type: 'url', ph: 'https://maps.google.com/…' },
+      { k: 'note', label: 'Why this place?', type: 'textarea', ph: 'where it all started', max: 300 },
+    ],
+  },
   coupon: {
     label: 'Coupon',
     fields: [
@@ -45,7 +71,17 @@ const TYPES = {
       { k: 'expires', label: 'Expires (optional)', type: 'date' },
     ],
   },
+  news: {
+    label: 'News',
+    fields: [
+      { k: 'url', label: 'Article link', type: 'url', ph: 'https://…', req: true },
+      { k: 'headline', label: 'Headline (optional)', ph: 'paste the title', max: 140 },
+      { k: 'note', label: 'Why you’re sending it', type: 'textarea', ph: 'this made me think of you', max: 300 },
+    ],
+  },
 };
+// Fields whose value is a file to upload (picked, recorded or drawn).
+const isFileField = (f) => ['file', 'record', 'draw'].includes(f.type);
 
 // ---------- tiny helpers ----------
 function h(tag, props = {}, ...kids) {
@@ -158,8 +194,16 @@ function renderCatalog() {
   );
 }
 
+const fmtSec = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+
 function summary(it) {
   if (it.type === 'note') return it.text;
+  if (it.type === 'voice') return `voice note${it.seconds ? ` · ${fmtSec(it.seconds)}` : ''}`;
+  if (it.type === 'drawing') return it.caption || 'a drawing';
+  if (it.type === 'location') return it.name;
+  if (it.type === 'gift') return it.note || hostOf(it.url);
+  if (it.type === 'news') return it.headline || hostOf(it.url);
   if (it.type === 'coupon') return it.title;
   if (it.type === 'song') { try { return it.caption || new URL(it.url).hostname.replace('www.', ''); } catch { return it.url; } }
   return it.caption || it.fileName || it.url || '';
@@ -227,6 +271,132 @@ function emptyCart() {
   });
 }
 
+// In-dialog recorder for voice notes. Exposes the recording as a File via getFile().
+function recorderWidget(f, item) {
+  const maxSec = f.maxSec || 120;
+  let rec = null, stream = null, chunks = [], file = null, timer = null, seconds = 0;
+  const label = h('span', { className: 'rec-label' }, 'Record');
+  const btn = h('button', { type: 'button', className: 'rec-btn' }, h('span', { className: 'rec-dot' }), label);
+  const time = h('span', { className: 'rec-time' }, '0:00');
+  const kept = item && files.has(item.id);
+  const status = h('small', { className: 'keep' }, kept ? `current: ${fmtSec(item.seconds || 0)} recording · record again to replace it` : 'not recorded yet');
+  const audio = h('audio', { controls: true, className: 'rec-play', hidden: true });
+  const wrap = h('div', { className: 'field recorder' }, h('span', {}, f.label), h('div', { className: 'rec-row' }, btn, time), status, audio);
+
+  const release = () => { stream?.getTracks().forEach((t) => t.stop()); stream = null; };
+  const stop = () => { clearInterval(timer); if (rec?.state === 'recording') rec.stop(); };
+  async function start() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { status.textContent = "this browser can't record audio"; return; }
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { status.textContent = 'microphone blocked. allow it in your browser to record'; return; }
+    chunks = [];
+    rec = new MediaRecorder(stream);
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      release();
+      const type = (rec.mimeType || 'audio/webm').split(';')[0];
+      const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+      file = new File(chunks, `voice.${ext}`, { type });
+      if (audio.src) URL.revokeObjectURL(audio.src);
+      audio.src = URL.createObjectURL(file);
+      audio.hidden = false;
+      wrap.classList.remove('live');
+      label.textContent = 'Record again';
+      status.textContent = `recorded ${fmtSec(seconds)} · listen back, or record again`;
+    };
+    rec.start();
+    const startedAt = Date.now();
+    seconds = 0;
+    time.textContent = '0:00';
+    audio.hidden = true;
+    wrap.classList.add('live');
+    label.textContent = 'Stop';
+    status.textContent = `recording… (stops by itself at ${fmtSec(maxSec)})`;
+    timer = setInterval(() => {
+      seconds = Math.floor((Date.now() - startedAt) / 1000);
+      time.textContent = fmtSec(seconds);
+      if (seconds >= maxSec) stop();
+    }, 250);
+  }
+  btn.onclick = () => (rec?.state === 'recording' ? stop() : start());
+
+  return {
+    el: wrap,
+    async getFile() {
+      if (rec?.state === 'recording') await new Promise((r) => { rec.addEventListener('stop', () => setTimeout(r), { once: true }); stop(); });
+      return file;
+    },
+    meta: () => (file ? { seconds } : {}),
+    stop() { stop(); release(); },
+  };
+}
+
+// In-dialog sketch pad. Draws at 2x for crisp lines; exported as a PNG.
+function drawWidget(f, item) {
+  const COLORS = ['#2b211b', '#c8372f', '#2f6db5', '#3f8a55', '#e0a526', '#e27aa0'];
+  const SIZES = { thin: 2, med: 5, thick: 11 };
+  let color = COLORS[0], size = SIZES.med, strokes = [], cur = null;
+  const canvas = h('canvas', { className: 'pad', width: 720, height: 480, ariaLabel: 'drawing pad' });
+  const ctx = canvas.getContext('2d');
+  const line = (s, a, b) => {
+    ctx.strokeStyle = s.color; ctx.lineWidth = s.size * 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
+  };
+  const redraw = () => {
+    ctx.fillStyle = '#fffdf8';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (const s of strokes) s.pts.forEach((p, i) => line(s, s.pts[i - 1] || [p[0] - 0.1, p[1]], p));
+  };
+  const pos = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return [(e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height)];
+  };
+  canvas.onpointerdown = (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    cur = { color, size, pts: [pos(e)] };
+    strokes.push(cur);
+    line(cur, [cur.pts[0][0] - 0.1, cur.pts[0][1]], cur.pts[0]);
+  };
+  canvas.onpointermove = (e) => {
+    if (!cur) return;
+    const p = pos(e);
+    line(cur, cur.pts[cur.pts.length - 1], p);
+    cur.pts.push(p);
+  };
+  canvas.onpointerup = canvas.onpointercancel = () => { cur = null; };
+  redraw();
+
+  const pick = (group, btnEl) => { group.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === btnEl)); };
+  const swatches = h('div', { className: 'swatches' }, ...COLORS.map((c, i) => {
+    const b = h('button', { type: 'button', className: `swatch${i ? '' : ' on'}`, style: `--c:${c}`, ariaLabel: `colour ${i + 1}` });
+    b.onclick = () => { color = c; pick(swatches, b); };
+    return b;
+  }));
+  const sizes = h('div', { className: 'sizes' }, ...Object.entries(SIZES).map(([name, px]) => {
+    const b = h('button', { type: 'button', className: `size${name === 'med' ? ' on' : ''}` }, name);
+    b.onclick = () => { size = px; pick(sizes, b); };
+    return b;
+  }));
+  const tools = h('div', { className: 'pad-tools' }, swatches, sizes,
+    h('span', { className: 'pad-edit' },
+      h('button', { type: 'button', className: 'clear', onclick: () => { strokes.pop(); redraw(); } }, 'undo'),
+      h('button', { type: 'button', className: 'clear', onclick: () => { strokes = []; redraw(); } }, 'clear')));
+  const kept = item && files.has(item.id);
+  const el = h('div', { className: 'field drawer' }, h('span', {}, f.label), canvas, tools,
+    kept ? h('small', { className: 'keep' }, 'your current drawing stays unless you draw a new one') : null);
+
+  return {
+    el,
+    getFile: () => (strokes.length
+      ? new Promise((r) => canvas.toBlob((b) => r(new File([b], 'drawing.png', { type: 'image/png' })), 'image/png'))
+      : Promise.resolve(null)),
+    meta: () => ({}),
+    stop() {},
+  };
+}
+
+let activeWidgets = []; // stopped when the dialog closes (releases the microphone)
+
 function fieldEl(f, item) {
   const props = { name: f.k, placeholder: f.ph || '' };
   let input;
@@ -249,27 +419,38 @@ function openForm(type, item = null) {
   const form = $('#dlgForm');
   const dlg = $('#dlg');
   const err = h('p', { className: 'err' });
-  if (T.fields.some((f) => f.type === 'file') && !SUPABASE_URL) {
+  if (T.fields.some(isFileField) && !SUPABASE_URL) {
     err.textContent = 'uploads need Supabase set up (see README). links still work.';
   }
   dlg.className = '';
+  const widgets = {};
   form.replaceChildren(
     h('button', { type: 'button', className: 'x', ariaLabel: 'Close', onclick: () => dlg.close() }, '×'),
     h('h3', { className: 'dlg-title' }, `${item ? 'EDIT' : 'ADD'} ${T.label.toUpperCase()}`),
-    ...T.fields.map((f) => fieldEl(f, item)),
+    ...T.fields.map((f) => {
+      if (f.type === 'record' || f.type === 'draw') {
+        const w = widgets[f.k] = (f.type === 'record' ? recorderWidget : drawWidget)(f, item);
+        activeWidgets.push(w);
+        return w.el;
+      }
+      return fieldEl(f, item);
+    }),
     err,
     h('div', { className: 'row' },
       h('button', { type: 'submit', className: 'btn primary' }, item ? 'Save changes' : 'Add to package'),
       h('button', { type: 'button', className: 'btn', onclick: () => dlg.close() }, 'Cancel')),
   );
-  form.onsubmit = (e) => {
+  form.onsubmit = async (e) => {
     e.preventDefault();
     const data = {};
     let file = null;
     for (const f of T.fields) {
       const el = form.elements[f.k];
-      if (f.type === 'file') {
-        file = el.files[0] || null;
+      if (isFileField(f)) {
+        const w = widgets[f.k];
+        file = w ? await w.getFile() : el.files[0] || null;
+        if (w) Object.assign(data, w.meta());
+        if (f.req && !file && !(item && files.has(item.id))) { err.textContent = f.reqMsg || 'add a file first'; return; }
         if (file && f.maxMB && file.size > f.maxMB * MB) { err.textContent = `that file is over ${f.maxMB}MB`; return; }
         if (file && !SUPABASE_URL) { err.textContent = 'uploads need Supabase set up (see README).'; return; }
         data.file = file;
@@ -288,6 +469,7 @@ function openForm(type, item = null) {
     } else if (keptFile) {
       next.local = item.local;
       next.fileName = item.fileName;
+      if (item.seconds) next.seconds = item.seconds;
     }
     if (item) state.items[state.items.findIndex((i) => i.id === item.id)] = next;
     else state.items.push(next);
@@ -640,6 +822,42 @@ function openItem(it) {
     body = h('div', { className: 'media' },
       src ? h('video', { src, controls: true, playsInline: true, className: 'vid' }) : embedEl(it.url),
       it.caption ? h('p', { className: 'cap' }, it.caption) : null);
+  } else if (it.type === 'gift') {
+    const href = safeUrl(it.url);
+    body = h('div', { className: 'giftcard' },
+      h('span', { className: 'g-ribbon', ariaHidden: 'true' }),
+      h('p', { className: 'g-kicker' }, 'a little gift for you'),
+      it.note ? h('p', { className: 'g-note' }, it.note) : null,
+      href ? h('a', { className: 'btn primary', href, target: '_blank', rel: 'noopener noreferrer' }, 'open your gift ↗') : null);
+  } else if (it.type === 'voice') {
+    const src = safeUrl(it.src);
+    body = h('div', { className: 'voicebox' },
+      h('p', { className: 'v-kicker' }, `a voice note${it.seconds ? ` · ${fmtSec(it.seconds)}` : ''}`),
+      src ? h('audio', { src, controls: true, className: 'v-audio' }) : h('p', {}, 'recording missing'));
+  } else if (it.type === 'drawing') {
+    const src = safeUrl(it.src);
+    body = h('figure', { className: 'sketch' },
+      src ? h('img', { src, alt: it.caption || 'a drawing for you' }) : h('p', {}, 'drawing missing'),
+      it.caption ? h('figcaption', {}, it.caption) : null);
+  } else if (it.type === 'location') {
+    // Embed by coordinates when the map link has them, else by name (unless only a link was given).
+    const link = safeUrl(it.url);
+    const at = (it.url || '').match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || (it.url || '').match(/[?&](?:q|ll|query)=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    const q = at ? `${at[1]},${at[2]}` : !link ? it.name : null;
+    const open = link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.name || '')}`;
+    body = h('div', { className: 'mapcard' },
+      q ? h('iframe', { className: 'map', src: `https://www.google.com/maps?q=${encodeURIComponent(q)}&output=embed`, loading: 'lazy', title: `map of ${it.name}` }) : null,
+      h('h4', {}, it.name || 'a place'),
+      it.note ? h('p', { className: 'cap' }, it.note) : null,
+      h('a', { className: 'btn', href: open, target: '_blank', rel: 'noopener noreferrer' }, 'open in maps ↗'));
+  } else if (it.type === 'news') {
+    const href = safeUrl(it.url);
+    const host = hostOf(it.url);
+    body = h('article', { className: 'clipping' },
+      h('p', { className: 'n-mast' }, 'THE DAILY YOU'),
+      h('h4', {}, it.headline || 'something worth reading'),
+      it.note ? h('p', { className: 'n-note' }, it.note) : null,
+      href ? h('a', { className: 'btn', href, target: '_blank', rel: 'noopener noreferrer' }, `read it on ${host || 'the web'} ↗`) : null);
   } else if (it.type === 'coupon') {
     let exp = null;
     if (it.expires) {
@@ -703,7 +921,12 @@ async function boot() {
   paintBarcodes();
   const dlg = $('#dlg');
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
-  dlg.addEventListener('close', () => dlg.querySelectorAll('video, iframe').forEach((m) => m.remove()));
+  dlg.addEventListener('close', () => {
+    if (dlg.open) return; // close event arrives a tick late; the dialog may already show the next item
+    dlg.querySelectorAll('video, audio, iframe').forEach((m) => m.remove());
+    activeWidgets.forEach((w) => w.stop());
+    activeWidgets = [];
+  });
 
   const params = new URLSearchParams(location.search);
   if (params.get('track')) return showTracker(params.get('track'));

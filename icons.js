@@ -76,6 +76,70 @@ export const ICONS = {
       <path d="M46 51h44M50 57h36M54 62h28" stroke="#6e5428" stroke-width="1.4"/>
     </g>
   </svg>`,
+
+  gift: `<svg viewBox="0 0 100 100" aria-hidden="true">
+    <g transform="rotate(-4 50 55)">
+      <rect x="20" y="44" width="60" height="44" rx="3" fill="#e98fa3"/>
+      <rect x="20" y="44" width="60" height="44" rx="3" fill="url(#g-gift)" opacity=".25"/>
+      <rect x="15" y="34" width="70" height="14" rx="3" fill="#f2a4b5"/>
+      <rect x="44" y="34" width="12" height="54" fill="#fbe3b8"/>
+      <path d="M50 34c-6-12-22-16-24-8s14 10 24 8zM50 34c6-12 22-16 24-8s-14 10-24 8z" fill="#fbe3b8" stroke="#e6c48e" stroke-width="1.4"/>
+      <circle cx="50" cy="33" r="4.5" fill="#f6d39b"/>
+      <path d="M20 66h60" stroke="#d97a90" stroke-width="1.2" stroke-dasharray="2 3"/>
+    </g>
+    <defs><linearGradient id="g-gift" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#b4546c"/></linearGradient></defs>
+  </svg>`,
+
+  voice: `<svg viewBox="0 0 100 100" aria-hidden="true">
+    <defs><linearGradient id="g-mic" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9aa3ab"/><stop offset=".45" stop-color="#eef1f3"/><stop offset="1" stop-color="#8c959d"/></linearGradient></defs>
+    <g transform="rotate(8 50 50)">
+      <rect x="35" y="10" width="30" height="44" rx="15" fill="url(#g-mic)" stroke="#6f7880" stroke-width="1.5"/>
+      <path d="M38 22h24M37 30h26M37 38h26M38 46h24" stroke="#6f7880" stroke-width="1.2"/>
+      <rect x="35" y="27" width="30" height="5" fill="#c8372f"/>
+      <path d="M28 40v4c0 12 10 21 22 21s22-9 22-21v-4" fill="none" stroke="#3a3a3f" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M50 65v16" stroke="#3a3a3f" stroke-width="4"/>
+      <rect x="34" y="80" width="32" height="7" rx="3.5" fill="#3a3a3f"/>
+    </g>
+  </svg>`,
+
+  drawing: `<svg viewBox="0 0 110 100" aria-hidden="true">
+    <path d="M14 56c0-24 22-40 46-38s38 16 38 32c0 10-8 14-16 12s-12 6-6 12-4 14-20 14C30 88 14 76 14 56z" fill="#ead2a8" stroke="#c9a46d" stroke-width="1.5" transform="rotate(-6 55 55)"/>
+    <ellipse cx="78" cy="60" rx="6" ry="5" fill="#efe5d6" transform="rotate(-6 55 55)"/>
+    <circle cx="32" cy="46" r="7" fill="#c8372f"/>
+    <circle cx="48" cy="33" r="7" fill="#e0a526"/>
+    <circle cx="67" cy="32" r="7" fill="#3f8a55"/>
+    <circle cx="28" cy="66" r="7" fill="#2f6db5"/>
+    <circle cx="46" cy="74" r="6.5" fill="#e27aa0"/>
+    <g transform="rotate(38 70 60)">
+      <rect x="66" y="22" width="7" height="50" rx="3" fill="#b07b45"/>
+      <rect x="66" y="70" width="7" height="8" fill="#c9cdd1"/>
+      <path d="M66 78h7l-1 9c-1 4-4 4-5 0z" fill="#2b211b"/>
+    </g>
+  </svg>`,
+
+  location: `<svg viewBox="0 0 110 100" aria-hidden="true">
+    <path d="M10 40 38 30l34 10 28-10v50L72 90 38 80 10 90z" fill="#e8e1cc"/>
+    <path d="M38 30v50M72 40v50" stroke="#cfc4a6" stroke-width="1.5"/>
+    <path d="M10 40 38 30v50L10 90z" fill="#ddd4b9"/>
+    <path d="M72 40l28-10v50L72 90z" fill="#ddd4b9"/>
+    <path d="M14 70c14-6 20 4 34-2s22-14 36-8 12 2 14 0" fill="none" stroke="#88b6d6" stroke-width="3" stroke-linecap="round"/>
+    <path d="M20 52h12M50 56h10M80 62h12" stroke="#b9ae8e" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <path d="M10 40 38 30l34 10 28-10v50L72 90 38 80 10 90z" fill="none" stroke="#b5a885" stroke-width="1.5" stroke-linejoin="round"/>
+    <ellipse cx="56" cy="64" rx="7" ry="2.5" fill="rgba(0,0,0,.18)"/>
+    <path d="M56 64c-9-12-14-19-14-26a14 14 0 0 1 28 0c0 7-5 14-14 26z" fill="#c8372f"/>
+    <circle cx="56" cy="38" r="5" fill="#fff4ea"/>
+  </svg>`,
+
+  news: `<svg viewBox="0 0 110 100" aria-hidden="true">
+    <g transform="rotate(-5 55 50)">
+      <path d="M20 16h72v70H28a8 8 0 0 1-8-8z" fill="#f4f0e6" stroke="#cfc8b8" stroke-width="1.2"/>
+      <path d="M12 30h8v48a4 4 0 0 1-8 0z" fill="#e5dfd0" stroke="#cfc8b8" stroke-width="1.2"/>
+      <rect x="28" y="22" width="56" height="9" fill="#2b2b2b"/>
+      <path d="M28 36h56" stroke="#2b2b2b" stroke-width="1"/>
+      <rect x="28" y="41" width="24" height="18" fill="#b9b3a6"/>
+      <path d="M56 42h28M56 47h28M56 52h24M56 57h28M28 64h56M28 69h56M28 74h48M28 79h52" stroke="#9a948a" stroke-width="2"/>
+    </g>
+  </svg>`,
 };
 
 // Deterministic pseudo-random barcode.

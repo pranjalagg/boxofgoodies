@@ -1,6 +1,6 @@
 # box of goodies
 
-A digital care package. Pick a few things (note, photo, song, video, coupon), tuck them into a box, and send the link. The person who gets it sees "you've got mail", taps the box, and opens each item.
+A digital care package. Pick a few things (note, photo, song, video, gift, voice note, drawing, location, coupon, news), tuck them into a box, and send the link. The person who gets it sees "you've got mail", taps the box, and opens each item.
 
 Plain HTML/CSS/JS with no build step. Supabase stores packages and uploaded photos and videos.
 
@@ -18,11 +18,11 @@ If `config.js` is empty, the app runs without a backend. Links then carry the wh
 ## Set up Supabase (needed for uploads and short links)
 
 1. Create a free project at https://supabase.com.
-2. Open **SQL Editor** and run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (002 to 005). Each file is safe to re-run. Together they create:
+2. Open **SQL Editor** and run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (002 to 006). Each file is safe to re-run. Together they create:
    - the `packages` table, which nobody can list or write to directly
    - `create_package(...)`, the only way to add a package, with the limits below
    - `get_package(id)`, used to read a single package
-   - a public `attachments` storage bucket (50 MB per file, images and videos only)
+   - a public `attachments` storage bucket (50 MB per file; images, videos and audio)
    - read-only dashboard views in the `admin` schema
 3. Go to **Project Settings → API**, copy the Project URL and the `anon` public key, and paste them into `config.js`.
 
@@ -89,7 +89,7 @@ Don't use "Deploy from a branch". That would serve the committed `env.js`, and r
 | `config.js` | Supabase URL and anon key |
 | `env.js` | `dev` in the repo; the deploy workflow sets it to `prod` |
 | `supabase/schema.sql` | base table, read function, storage bucket |
-| `supabase/migrations/` | dev/prod tag (002), dashboard views (003), abuse limits (004), open date and tracking (005) |
+| `supabase/migrations/` | dev/prod tag (002), dashboard views (003), abuse limits (004), open date and tracking (005), voice uploads and views for the newer items (006) |
 | `.github/workflows/pages.yml` | deploys to GitHub Pages as `prod`, with versioned asset URLs |
 | `serve.py` | local dev server without caching |
 
