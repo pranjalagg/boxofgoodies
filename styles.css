@@ -272,13 +272,26 @@ dialog[open] { animation: rise .25s ease-out; }
   transform: rotate(-4deg);
 }
 .parcel.sealed { animation-duration: 6s; }
-.parcel.nope { animation: nope .45s ease-in-out; }
-@keyframes nope {
-  20% { transform: translateX(-7px) rotate(-2deg); }
-  40% { transform: translateX(6px) rotate(1.5deg); }
-  60% { transform: translateX(-4px) rotate(-1deg); }
-  80% { transform: translateX(2px); }
+/* peeking while sealed: the lid lifts a crack over identical tissue-wrapped lumps */
+.p-inside {
+  position: absolute; inset: 0 0 auto 0; height: 24%; overflow: hidden;
+  clip-path: polygon(4% 0, 96% 0, 100% 100%, 0 100%);
+  background: linear-gradient(#36261a, #563d27);
+  display: flex; justify-content: center; align-items: flex-end; padding: 0 12%;
 }
+.lump {
+  --tissue: #f3e4d2;
+  flex: none; width: 24px; height: 18px; margin: 0 -2px; border-radius: 50% 50% 35% 35%;
+  background: repeating-linear-gradient(115deg, rgba(255, 255, 255, .35) 0 2px, transparent 2px 6px), var(--tissue);
+  box-shadow: inset 0 -3px 4px rgba(0, 0, 0, .2);
+  transform: translateY(110%);
+  transition: transform .45s cubic-bezier(.22, 1, .36, 1) calc(var(--i) * 45ms);
+}
+.lump:nth-child(3n+2) { --tissue: #f1d0d2; }
+.lump:nth-child(3n+3) { --tissue: #d8e6d4; }
+.parcel.peek .lump { transform: translateY(30%); }
+.parcel.peek .p-top { transform: translateY(-26px) rotate(-6deg); transition: transform .45s cubic-bezier(.22, 1, .36, 1); }
+.parcel.open .p-inside { opacity: 0; transition: opacity .4s .35s; }
 
 #skipWait { margin-top: 10px; font-size: 12px; }
 

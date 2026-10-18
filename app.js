@@ -496,6 +496,13 @@ function showViewer(pkg, { preview = false } = {}) {
   parcel.classList.remove('open');
   skip.hidden = true;
 
+  // While sealed the server only sends a count; previews and URL links have the items.
+  const count = pkg.count ?? (pkg.items || []).length;
+  let peeking = false;
+  $('#pInside').replaceChildren(...Array.from({ length: Math.min(count, 12) }, (_, i) =>
+    h('span', { className: 'lump', style: `--i:${i}` })));
+  parcel.classList.remove('peek');
+
   const unseal = () => {
     clearInterval(sealTimer);
     parcel.classList.remove('sealed');
@@ -505,13 +512,13 @@ function showViewer(pkg, { preview = false } = {}) {
   };
 
   parcel.onclick = () => {
-    // Still sealed: rattle the box instead of opening it.
+    // Still sealed: lift the lid a crack. Only the number of things shows, never what they are.
     if (parcel.classList.contains('sealed')) {
-      parcel.classList.remove('nope');
-      void parcel.offsetWidth; // restart the animation
-      parcel.classList.add('nope');
-      setTimeout(() => parcel.classList.remove('nope'), 450); // back to floating
-      toast(`not yet! it opens ${fmtWhen(until)}`);
+      if (peeking) return;
+      peeking = true;
+      parcel.classList.add('peek');
+      tap.textContent = count === 1 ? 'one little thing inside…' : `${count} little things inside…`;
+      setTimeout(() => { parcel.classList.remove('peek'); peeking = false; tick(); }, 2600);
       return;
     }
     parcel.classList.add('open');
@@ -534,7 +541,7 @@ function showViewer(pkg, { preview = false } = {}) {
   parcel.disabled = false;
   const tick = () => {
     const left = until - Date.now();
-    if (left > 0) { tap.textContent = `opens in ${countdown(left)}`; return; }
+    if (left > 0) { if (!peeking) tap.textContent = `opens in ${countdown(left)}`; return; }
     clearInterval(sealTimer);
     if (pkg.sealed) { parcel.disabled = true; refetch(); }
     else unseal();
