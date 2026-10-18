@@ -37,6 +37,18 @@ Packages made from `localhost` / `127.0.0.1` are tagged `env = 'dev'`, and their
 
 The tag is a label, not a security boundary. Anyone can send packages to the backend, so don't rely on `env` to keep anything secret.
 
+### Browsing packages
+
+Run `supabase/migrations/003_admin_views.sql`, then in **Table Editor** switch the schema dropdown to `admin`:
+
+| view | shows |
+| --- | --- |
+| `packages_overview` | one row per package: to, from, env, item counts by type |
+| `package_items` | one row per item, raw JSON included |
+| `notes`, `photos`, `songs`, `videos`, `coupons` | one view per item type with readable columns |
+
+Every view has an `env` column, so you can filter to `prod` in the dashboard. The views live in `admin`, not `public`, so the app's public key can't read them.
+
 ## Deploy
 
 **Vercel:** push to GitHub, then in Vercel choose *Add New → Project*, import the repo, and keep the defaults (no framework, no build command). Or run `npx vercel` in this folder.
