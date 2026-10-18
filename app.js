@@ -1,0 +1,473 @@
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { ICONS, barcode } from './icons.js';
+
+const $ = (s) => document.querySelector(s);
+const MB = 1024 * 1024;
+const DRAFT_KEY = 'bog-draft-v1';
+const BUCKET = 'attachments';
+
+const TYPES = {
+  note: {
+    label: 'Note',
+    fields: [{ k: 'text', label: 'Note', type: 'textarea', ph: 'write something...', req: true, max: 3000 }],
+  },
+  photo: {
+    label: 'Photo',
+    fields: [
+      { k: 'file', label: 'Photo', type: 'file', accept: 'image/*', req: true, maxMB: 10 },
+      { k: 'caption', label: 'Caption', ph: 'us, that one summer', max: 120 },
+    ],
+  },
+  song: {
+    label: 'Song',
+    fields: [
+      { k: 'url', label: 'Spotify / YouTube / Apple Music link', type: 'url', ph: 'https://open.spotify.com/track/...', req: true },
+      { k: 'caption', label: 'Why this song?', ph: 'reminds me of you', max: 200 },
+    ],
+  },
+  video: {
+    label: 'Video',
+    fields: [
+      { k: 'file', label: 'Upload a video', type: 'file', accept: 'video/*', maxMB: 50 },
+      { k: 'url', label: '…or paste a YouTube link', type: 'url', ph: 'https://youtu.be/...' },
+      { k: 'caption', label: 'Caption', ph: 'watch this when you miss me', max: 200 },
+    ],
+    validate: (d) => (d.file || d.url ? '' : 'add a video file or a link'),
+  },
+  coupon: {
+    label: 'Coupon',
+    fields: [
+      { k: 'title', label: 'Good for', ph: 'one free hug', req: true, max: 60 },
+      { k: 'details', label: 'Fine print', ph: 'redeemable anytime, no questions asked', max: 160 },
+      { k: 'expires', label: 'Expires (optional)', type: 'date' },
+    ],
+  },
+};
+
+// ---------- tiny helpers ----------
+function h(tag, props = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null) continue;
+    if (k.startsWith('on') || (k in el && typeof el[k] !== 'object')) el[k] = v;
+    else el.setAttribute(k, v);
+  }
+  el.append(...kids.flat().filter((c) => c != null && c !== false));
+  return el;
+}
+// Each SVG copy gets its own gradient/mask ids; a shared id resolves to the first
+// copy in the DOM, which breaks when that copy sits inside a hidden section.
+let iconSeq = 0;
+const iconEl = (type, cls = 'icon') => {
+  const s = h('span', { className: cls });
+  const n = ++iconSeq;
+  s.innerHTML = ICONS[type].replace(/(id="|url\(#)([\w-]+)/g, `$1$2-${n}`);
+  return s;
+};
+const rid = () => crypto.randomUUID().slice(0, 8);
+const safeUrl = (u) => {
+  try {
+    const url = new URL(u);
+    return ['https:', 'http:', 'blob:'].includes(url.protocol) ? url.href : null;
+  } catch { return null; }
+};
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+const b64encode = (obj) => {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let bin = '';
+  bytes.forEach((b) => (bin += String.fromCharCode(b)));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const b64decode = (s) => {
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+};
+
+let clientP;
+function getClient() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  clientP ??= import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm')
+    .then((m) => m.createClient(SUPABASE_URL, SUPABASE_ANON_KEY));
+  return clientP;
+}
+
+// ---------- state ----------
+const state = { to: '', from: '', items: [] };
+const files = new Map(); // item id -> File (not persisted)
+
+function saveDraft() {
+  try {
+    const items = state.items.filter((i) => !files.has(i.id));
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...state, items }));
+  } catch {}
+}
+function loadDraft() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (d) Object.assign(state, { to: d.to || '', from: d.from || '', items: d.items || [] });
+  } catch {}
+}
+
+// ---------- shared decorations ----------
+function paintBarcodes(root = document) {
+  root.querySelectorAll('.barcode[data-seed]').forEach((el) => {
+    if (!el.firstChild) el.innerHTML = barcode(+el.dataset.seed);
+  });
+}
+
+// ---------- editor ----------
+function renderCatalog() {
+  $('#catalog').replaceChildren(
+    ...Object.entries(TYPES).map(([type, T]) =>
+      h('button', { type: 'button', className: 'add', onclick: () => openAdd(type) },
+        iconEl(type), h('span', {}, `+ ${T.label}`)))
+  );
+}
+
+function summary(it) {
+  if (it.type === 'note') return it.text;
+  if (it.type === 'coupon') return it.title;
+  if (it.type === 'song') { try { return it.caption || new URL(it.url).hostname.replace('www.', ''); } catch { return it.url; } }
+  return it.caption || it.fileName || it.url || '';
+}
+
+function renderCart() {
+  const cart = $('#cart');
+  if (!state.items.length) {
+    cart.replaceChildren(h('li', { className: 'empty' }, 'nothing tucked in yet'));
+    return;
+  }
+  cart.replaceChildren(
+    ...state.items.map((it) =>
+      h('li', {},
+        h('span', { className: 'ci' }, TYPES[it.type].label.toUpperCase()),
+        h('span', { className: 'cd' }, summary(it)),
+        h('span', { className: 'cq' }, '1'),
+        h('button', {
+          type: 'button', className: 'rm', title: 'Remove', ariaLabel: `Remove ${TYPES[it.type].label}`,
+          onclick: () => removeItem(it.id),
+        }, '×')))
+  );
+}
+
+function removeItem(id) {
+  const it = state.items.find((i) => i.id === id);
+  if (it?.local) URL.revokeObjectURL(it.local);
+  files.delete(id);
+  state.items = state.items.filter((i) => i.id !== id);
+  renderCart();
+  saveDraft();
+  resetLink();
+}
+
+function fieldEl(f) {
+  const props = { name: f.k, placeholder: f.ph || '' };
+  let input;
+  if (f.type === 'textarea') input = h('textarea', { ...props, rows: 5 });
+  else input = h('input', { ...props, type: f.type || 'text', accept: f.type === 'file' ? f.accept : null });
+  if (f.req) input.required = true;
+  if (f.max) input.maxLength = f.max;
+  return h('label', { className: 'field' }, h('span', {}, f.label), input);
+}
+
+function openAdd(type) {
+  const T = TYPES[type];
+  const form = $('#dlgForm');
+  const dlg = $('#dlg');
+  const err = h('p', { className: 'err' });
+  if (T.fields.some((f) => f.type === 'file') && !SUPABASE_URL) {
+    err.textContent = 'uploads need Supabase set up (see README). links still work.';
+  }
+  dlg.className = '';
+  form.replaceChildren(
+    h('button', { type: 'button', className: 'x', ariaLabel: 'Close', onclick: () => dlg.close() }, '×'),
+    h('h3', { className: 'dlg-title' }, `ADD ${T.label.toUpperCase()}`),
+    ...T.fields.map(fieldEl),
+    err,
+    h('div', { className: 'row' },
+      h('button', { type: 'submit', className: 'btn primary' }, 'Add to package'),
+      h('button', { type: 'button', className: 'btn', onclick: () => dlg.close() }, 'Cancel')),
+  );
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const data = {};
+    let file = null;
+    for (const f of T.fields) {
+      const el = form.elements[f.k];
+      if (f.type === 'file') {
+        file = el.files[0] || null;
+        if (file && f.maxMB && file.size > f.maxMB * MB) { err.textContent = `that file is over ${f.maxMB}MB`; return; }
+        if (file && !SUPABASE_URL) { err.textContent = 'uploads need Supabase set up (see README).'; return; }
+        data.file = file;
+      } else if (el.value.trim()) data[f.k] = el.value.trim();
+    }
+    const msg = T.validate?.(data);
+    if (msg) { err.textContent = msg; return; }
+    delete data.file;
+    const item = { id: rid(), type, ...data };
+    if (file) {
+      files.set(item.id, file);
+      item.local = URL.createObjectURL(file);
+      item.fileName = file.name;
+    }
+    state.items.push(item);
+    renderCart();
+    saveDraft();
+    resetLink();
+    dlg.close();
+  };
+  dlg.showModal();
+  form.querySelector('input, textarea')?.focus();
+}
+
+function resetLink() {
+  $('#linkout').hidden = true;
+}
+
+async function generate() {
+  if (!state.items.length) return toast('tuck at least one thing inside first');
+  const btn = $('#gen');
+  btn.disabled = true;
+  btn.textContent = 'packing…';
+  try {
+    const pkg = { to: state.to, from: state.from, items: [] };
+    const base = location.origin + location.pathname;
+    let link;
+    const client = await getClient();
+    if (client) {
+      const id = crypto.randomUUID();
+      for (const it of state.items) {
+        const { local, fileName, ...out } = it;
+        const f = files.get(it.id);
+        if (f) {
+          btn.textContent = `uploading ${TYPES[it.type].label.toLowerCase()}…`;
+          const ext = (f.name.split('.').pop() || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 8);
+          const path = `${id}/${it.id}.${ext}`;
+          const { error } = await client.storage.from(BUCKET).upload(path, f, { contentType: f.type });
+          if (error) throw error;
+          out.src = client.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+          out.mime = f.type;
+        }
+        pkg.items.push(out);
+      }
+      const { error } = await client.from('packages').insert({ id, data: pkg });
+      if (error) throw error;
+      link = `${base}?p=${id}`;
+    } else {
+      pkg.items = state.items.map(({ local, fileName, ...rest }) => rest);
+      link = `${base}#d=${b64encode(pkg)}`;
+    }
+    $('#linkfield').value = link;
+    $('#linkout').hidden = false;
+    $('#linkfield').select();
+    toast('your package is ready to send');
+  } catch (e) {
+    console.error(e);
+    toast(`couldn't pack it: ${e.message || e}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Link';
+  }
+}
+
+function showEditor() {
+  document.body.className = 'mode-edit';
+  $('#viewer').hidden = true;
+  $('#editor').hidden = false;
+  window.scrollTo(0, 0);
+}
+
+function initEditor() {
+  loadDraft();
+  const to = $('#to'), from = $('#from');
+  to.value = state.to;
+  from.value = state.from;
+  to.oninput = () => { state.to = to.value; saveDraft(); resetLink(); };
+  from.oninput = () => { state.from = from.value; saveDraft(); resetLink(); };
+  $('#digits').textContent = '9405 5118 9956 ' + String(Math.random()).slice(2, 6) + ' 2345 67';
+  renderCatalog();
+  renderCart();
+  $('#gen').onclick = generate;
+  $('#preview').onclick = () => {
+    if (!state.items.length) return toast('tuck at least one thing inside first');
+    const items = state.items.map((it) => (it.local ? { ...it, src: it.local, mime: files.get(it.id)?.type } : it));
+    showViewer({ to: state.to, from: state.from, items }, { preview: true });
+  };
+  $('#copy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('#linkfield').value); toast('link copied'); }
+    catch { $('#linkfield').select(); toast('press ⌘C / Ctrl+C to copy'); }
+  };
+  showEditor();
+}
+
+// ---------- viewer ----------
+function showViewer(pkg, { preview = false } = {}) {
+  document.body.className = 'mode-view';
+  $('#editor').hidden = true;
+  $('#viewer').hidden = false;
+  $('#mail').hidden = false;
+  $('#goodies').hidden = true;
+  window.scrollTo(0, 0);
+
+  $('#mTo').textContent = pkg.to || 'you';
+  $('#mFrom').textContent = pkg.from || 'someone who cares';
+
+  const back = $('#vback');
+  if (preview) {
+    back.textContent = 'Edit package';
+    back.onclick = (e) => { e.preventDefault(); showEditor(); };
+  } else {
+    back.textContent = 'Make your own';
+    back.onclick = null;
+    back.href = location.pathname;
+  }
+
+  const parcel = $('#parcel');
+  parcel.classList.remove('open');
+  parcel.disabled = false;
+  $('#tap').textContent = 'tap to open';
+  parcel.onclick = () => {
+    parcel.classList.add('open');
+    parcel.disabled = true;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setTimeout(() => renderGoodies(pkg), reduce ? 0 : 900);
+  };
+}
+
+function renderGoodies(pkg) {
+  $('#mail').hidden = true;
+  $('#goodies').hidden = false;
+  $('#gfrom').textContent = pkg.from ? `from ${pkg.from}, with love` : '';
+  const items = (pkg.items || []).filter((it) => TYPES[it.type]);
+  $('#goodieGrid').replaceChildren(
+    ...items.map((it, i) =>
+      h('button', { type: 'button', className: 'goodie', style: `--i:${i}`, onclick: () => openItem(it) },
+        iconEl(it.type),
+        h('span', { className: 'chip' }, TYPES[it.type].label)))
+  );
+}
+
+function embedFor(raw) {
+  let u;
+  try { u = new URL(raw); } catch { return null; }
+  const host = u.hostname.replace(/^www\./, '');
+  if (host === 'open.spotify.com') {
+    const m = u.pathname.match(/\/(track|album|playlist|episode|show)\/([A-Za-z0-9]+)/);
+    if (m) return { src: `https://open.spotify.com/embed/${m[1]}/${m[2]}`, height: m[1] === 'track' ? 152 : 352 };
+  }
+  let yt = null;
+  if (host === 'youtu.be') yt = u.pathname.slice(1);
+  else if (host.endsWith('youtube.com')) yt = u.searchParams.get('v') || u.pathname.match(/\/(?:shorts|embed|live)\/([\w-]+)/)?.[1];
+  if (yt && /^[\w-]{6,20}$/.test(yt)) return { src: `https://www.youtube-nocookie.com/embed/${yt}`, video: true };
+  if (host === 'music.apple.com') return { src: `https://embed.music.apple.com${u.pathname}${u.search}`, height: 175 };
+  return null;
+}
+
+function embedEl(url) {
+  const em = embedFor(url);
+  if (!em) {
+    const href = safeUrl(url);
+    return href ? h('a', { className: 'btn primary', href, target: '_blank', rel: 'noopener noreferrer' }, 'open link ↗') : null;
+  }
+  return h('iframe', {
+    src: em.src, className: em.video ? 'embed ratio' : 'embed', height: em.height || null,
+    allow: 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture', loading: 'lazy',
+    title: 'embedded media', allowFullscreen: true,
+  });
+}
+
+function typeOut(el, text) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || text.length > 600) { el.textContent = text; return; }
+  let i = 0;
+  const tick = () => {
+    el.textContent = text.slice(0, ++i);
+    if (i < text.length && el.isConnected) setTimeout(tick, 22 + Math.random() * 30);
+  };
+  tick();
+}
+
+function openItem(it) {
+  const dlg = $('#dlg');
+  const form = $('#dlgForm');
+  let body;
+  if (it.type === 'note') {
+    const p = h('p', { className: 'note-paper' });
+    body = h('div', { className: 'paper' }, p);
+    setTimeout(() => typeOut(p, it.text || ''), 150);
+  } else if (it.type === 'photo') {
+    const src = safeUrl(it.src);
+    body = h('figure', { className: 'polaroid' },
+      src ? h('img', { src, alt: it.caption || 'a photo for you' }) : h('p', {}, 'photo missing'),
+      it.caption ? h('figcaption', {}, it.caption) : null);
+  } else if (it.type === 'song') {
+    body = h('div', { className: 'media' }, embedEl(it.url), it.caption ? h('p', { className: 'cap' }, it.caption) : null);
+  } else if (it.type === 'video') {
+    const src = safeUrl(it.src);
+    body = h('div', { className: 'media' },
+      src ? h('video', { src, controls: true, playsInline: true, className: 'vid' }) : embedEl(it.url),
+      it.caption ? h('p', { className: 'cap' }, it.caption) : null);
+  } else if (it.type === 'coupon') {
+    let exp = null;
+    if (it.expires) {
+      const d = new Date(it.expires + 'T00:00:00');
+      if (!isNaN(d)) exp = `expires ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    }
+    body = h('div', { className: 'coupon' },
+      h('p', { className: 'c-kicker' }, '★ OFFICIAL COUPON ★'),
+      h('p', { className: 'c-good' }, 'good for'),
+      h('h4', {}, it.title || 'something nice'),
+      it.details ? h('p', { className: 'c-fine' }, it.details) : null,
+      h('div', { className: 'c-foot' }, h('span', {}, exp || 'never expires'), h('span', {}, 'qty: 1')));
+  }
+  dlg.className = 'view';
+  form.onsubmit = null;
+  form.replaceChildren(
+    h('button', { type: 'button', className: 'x', ariaLabel: 'Close', onclick: () => dlg.close() }, '×'),
+    body,
+  );
+  dlg.showModal();
+}
+
+// ---------- boot ----------
+async function boot() {
+  paintBarcodes();
+  const dlg = $('#dlg');
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+  dlg.addEventListener('close', () => dlg.querySelectorAll('video, iframe').forEach((m) => m.remove()));
+
+  const id = new URLSearchParams(location.search).get('p');
+  const hash = location.hash.startsWith('#d=') ? location.hash.slice(3) : null;
+
+  if (!id && !hash) return initEditor();
+
+  document.body.className = 'mode-view';
+  $('#viewer').hidden = false;
+  $('#tap').textContent = 'fetching your package…';
+  $('#parcel').disabled = true;
+  try {
+    let pkg;
+    if (hash) pkg = b64decode(hash);
+    else {
+      const client = await getClient();
+      if (!client) throw new Error('no backend configured');
+      const { data, error } = await client.rpc('get_package', { pid: id });
+      if (error || !data) throw error || new Error('not found');
+      pkg = data;
+    }
+    showViewer(pkg);
+  } catch (e) {
+    console.error(e);
+    $('#tap').textContent = "hmm, this package got lost in the mail";
+    $('#vback').textContent = 'Make your own';
+  }
+}
+
+addEventListener('hashchange', () => location.reload());
+boot();

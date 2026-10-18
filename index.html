@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>digital care package</title>
+  <meta name="description" content="Tuck a few little things into a box and send it to someone special.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Quicksand:wght@500;700&family=Space+Mono:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="brand" href="./" aria-label="box of goodies home">
+    <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M6 14 20 8l14 6v16l-14 6-14-6z" fill="#c69a68" stroke="#3a2a1c" stroke-width="1.6" stroke-linejoin="round"/><path d="M6 14l14 6 14-6M20 20v16" fill="none" stroke="#3a2a1c" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 11l14 6" stroke="#f3e6cf" stroke-width="3"/></svg>
+    <span>box of<br>goodies</span>
+  </a>
+
+  <!-- ============ EDITOR ============ -->
+  <main id="editor" hidden>
+    <section class="desk">
+      <div class="label-wrap">
+        <div class="label">
+          <div class="label-inner">
+            <div class="label-head">DIGITAL CARE PACKAGE</div>
+            <div class="label-row">
+              <span class="label-key">TO:</span>
+              <input id="to" maxlength="40" placeholder="cutie" aria-label="to / title" autocomplete="off">
+              <div class="stamp small">to be delivered with<br>care and love</div>
+            </div>
+            <div class="label-row">
+              <span class="label-key">FROM:</span>
+              <input id="from" maxlength="40" placeholder="bestie" aria-label="from / your name" autocomplete="off">
+            </div>
+            <div class="label-bar">
+              <div class="barcode" data-seed="11"></div>
+              <div class="digits" id="digits"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <article class="receipt">
+          <h1 class="r-title">A LITTLE BOX OF GOODIES</h1>
+          <p class="r-sub">est. for sending a little care</p>
+          <div class="stamp">things to tuck inside</div>
+          <p class="r-head">*** SELECT ITEMS TO TUCK ***</p>
+          <div class="rule double"></div>
+          <div class="cols"><span>ITEM</span><span>ADD</span></div>
+          <div class="rule dashed"></div>
+          <div class="catalog" id="catalog"></div>
+          <div class="rule dashed"></div>
+          <div class="cols"><span>IN CART</span><span>QTY</span></div>
+          <ul class="cart" id="cart"></ul>
+          <div class="rule dashed"></div>
+          <div class="rule double"></div>
+          <div class="barcode wide" data-seed="3"></div>
+          <p class="r-foot"><b>THANK YOU FOR CARING</b><br>have a nice day :)</p>
+        </article>
+
+        <article class="receipt share">
+          <h2 class="r-title">A LITTLE BOX OF GOODIES</h2>
+          <p class="r-sub">share your parcel</p>
+          <div class="stamp">send your package</div>
+          <p class="r-head">*** GET YOUR LINK ***</p>
+          <div class="rule double"></div>
+          <button class="btn primary" id="gen" type="button">Generate Link</button>
+          <button class="btn" id="preview" type="button">Preview</button>
+          <div class="linkout" id="linkout" hidden>
+            <input id="linkfield" readonly aria-label="your package link">
+            <button class="btn" id="copy" type="button">Copy</button>
+          </div>
+          <div class="rule double"></div>
+          <div class="barcode wide" data-seed="5"></div>
+          <p class="r-foot">send it to someone special</p>
+        </article>
+      </div>
+    </section>
+    <footer class="foot">this package will be delivered with care and love</footer>
+  </main>
+
+  <!-- ============ VIEWER ============ -->
+  <main id="viewer" hidden>
+    <a class="btn corner" id="vback" href="./">Edit package</a>
+
+    <section id="mail" class="mail">
+      <h2 class="ymail">you've got mail</h2>
+      <button class="parcel" id="parcel" type="button" aria-label="Open the package">
+        <span class="p-top"></span>
+        <span class="p-front">
+          <span class="p-tape"></span>
+          <span class="mini">
+            <span class="mini-head">DIGITAL CARE PACKAGE</span>
+            <span class="mini-row"><i>to</i><b id="mTo"></b></span>
+            <span class="mini-row"><i>from</i><b id="mFrom"></b></span>
+            <span class="barcode" data-seed="11"></span>
+          </span>
+        </span>
+      </button>
+      <p class="tap" id="tap">tap to open</p>
+    </section>
+
+    <section id="goodies" class="goodies-wrap" hidden>
+      <h2 class="gtitle">your little box of goodies</h2>
+      <p class="gfrom" id="gfrom"></p>
+      <div class="goodies" id="goodieGrid"></div>
+    </section>
+
+    <footer class="foot">made with care</footer>
+  </main>
+
+  <dialog id="dlg"><form id="dlgForm" method="dialog"></form></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

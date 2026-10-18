@@ -1,0 +1,20 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.5, -.4, .4, 1)",
+        "createdAt": "2026-10-18T07:43:30.300Z",
+        "reason": "Claude: one-off anticipation on parcel lid toss, literal physical motion in whimsical gift-box reveal"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.3, 1.5, .5, 1)",
+        "createdAt": "2026-10-18T07:43:30.343Z",
+        "reason": "Claude: one-off pop-in of goodies after box opens, intentional playful overshoot matching reference site's whimsy"
+      }
+    ]
+  }
+}
