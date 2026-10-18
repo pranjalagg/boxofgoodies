@@ -18,7 +18,7 @@ If `config.js` is empty, the app runs without a backend. Links then carry the wh
 ## Set up Supabase (needed for uploads and short links)
 
 1. Create a free project at https://supabase.com.
-2. Open **SQL Editor** and run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (002, 003, 004). Each file is safe to re-run. Together they create:
+2. Open **SQL Editor** and run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (002 to 005). Each file is safe to re-run. Together they create:
    - the `packages` table, which nobody can list or write to directly
    - `create_package(...)`, the only way to add a package, with the limits below
    - `get_package(id)`, used to read a single package
@@ -49,6 +49,13 @@ The per-IP limit is best effort: a determined sender can fake the header it reli
 - Wipe test packages: `delete from packages where env = 'dev';`, then in **Storage → attachments** delete the `dev` folder.
 
 The tag is a label, not a security boundary. Anyone can send packages to the backend, so don't rely on `env` to keep anything secret.
+
+### "Don't open until" and opened notices
+
+Both need `005_open_at_and_tracking.sql`.
+
+- **Don't open until.** An optional date and time on the send receipt. Until then the recipient sees the box with a "do not open until" sticker and a countdown. The database holds the contents back (`get_package` returns only names, the open time and the item count), so they can't be read early. Without Supabase, the date travels inside the link and is only enforced by the page.
+- **Opened notice.** Generating a link also gives the sender a private tracking link (`?track=<id>.<token>`); only a hash of the token is stored. The first time the recipient taps the box open, `opened_at` is recorded. The tracking page and the "sent packages" list on the send receipt show sealed / not opened yet / opened with the time. Opening your own link in the browser you sent it from doesn't count, and recipients are told the sender will see when they open it.
 
 ### Browsing packages
 
@@ -82,7 +89,7 @@ Don't use "Deploy from a branch". That would serve the committed `env.js`, and r
 | `config.js` | Supabase URL and anon key |
 | `env.js` | `dev` in the repo; the deploy workflow sets it to `prod` |
 | `supabase/schema.sql` | base table, read function, storage bucket |
-| `supabase/migrations/` | dev/prod tag (002), dashboard views (003), abuse limits (004) |
+| `supabase/migrations/` | dev/prod tag (002), dashboard views (003), abuse limits (004), open date and tracking (005) |
 | `.github/workflows/pages.yml` | deploys to GitHub Pages as `prod`, with versioned asset URLs |
 | `serve.py` | local dev server without caching |
 

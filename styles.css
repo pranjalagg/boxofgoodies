@@ -166,9 +166,27 @@ button { font: inherit; color: inherit; }
 .btn.primary { background: var(--blush); border-color: #cc7d7f; color: var(--red-ink); }
 .share .btn { margin: 12px 0; }
 .share .btn + .btn { margin-top: 0; }
-.linkout { display: flex; gap: 8px; margin: 0 0 12px; }
+.linkout { margin: 0 0 12px; text-align: left; }
+.lo-label { font: 700 11px var(--mono); letter-spacing: 0; color: #5e564c; margin: 10px 0 5px; }
+.lo-row { display: flex; gap: 8px; }
 .linkout input { flex: 1; min-width: 0; font: 12px var(--mono); padding: 9px 10px; border: 1px dashed #b9a99a; border-radius: 8px; background: #fff; }
 .linkout .btn { width: auto; margin: 0; }
+
+/* "don't open until" */
+.openat { text-align: left; margin: 14px 0 2px; }
+.openat label { display: block; font: 700 11px var(--mono); letter-spacing: .1em; }
+.openat-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.openat input { flex: 1; min-width: 0; font: 13px var(--mono); padding: 8px 10px; border: 1px dashed #b9a99a; border-radius: 8px; background: #fff; color: var(--ink); }
+.openat input:focus { outline: 2px solid #e7b9b4; border-color: #cc7d7f; }
+.openat .hint { font-size: 11px; color: #5e564c; margin: 6px 0 0; }
+
+/* sent packages */
+.sent ul { list-style: none; margin: 6px 0 0; padding: 0; text-align: left; font-size: 11px; }
+.sent li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 4px 0; }
+.s-to { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-status { color: #5e564c; text-align: right; }
+.s-status.opened { color: var(--red-ink); font-weight: 700; }
+.s-track { color: var(--red-ink); font-size: 11px; text-underline-offset: 3px; }
 
 .foot { text-align: center; font-size: 11px; color: #4b3726; padding: 10px 16px 36px; }
 .mode-view .foot { color: var(--muted); margin-top: auto; padding-top: 40px; }
@@ -242,6 +260,27 @@ dialog[open] { animation: rise .25s ease-out; }
 .mini .barcode svg { display: block; width: 70%; height: 12px; margin: 4px auto 0; }
 
 .parcel.open { animation: none; }
+
+/* sealed until a date: a "do not open" sticker across the box */
+.parcel.sealed::after {
+  content: "DO NOT OPEN UNTIL\A" attr(data-until);
+  white-space: pre; position: absolute; left: 50%; top: 4%; z-index: 3;
+  transform: translateX(-50%) rotate(-5deg);
+  padding: 5px 10px; border: 2px solid var(--red); border-radius: 6px; background: #fff8f2;
+  font: 700 11px/1.35 var(--mono); letter-spacing: .06em; color: var(--red-ink); text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,.15);
+}
+.parcel.sealed { animation-duration: 6s; }
+#skipWait { margin-top: 10px; font-size: 12px; }
+
+/* sender's tracking page */
+.receipt.track { max-width: 420px; margin: 90px auto 40px; }
+.t-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 12px 0; text-align: left; font-size: 13px; }
+.t-rows dt { font-weight: 700; font-size: 11px; letter-spacing: .1em; padding-top: 2px; }
+.t-rows dd { margin: 0; overflow-wrap: anywhere; }
+.stamp.pending { color: #5e564c; }
+.stamp.opened { font-size: 30px; }
+.t-when { font: 13px var(--mono); margin: 8px 0 14px; }
 .parcel.open .p-top { transform: translateY(-70px) rotate(-14deg); opacity: 0; }
 .parcel.open .p-front { transform: translateY(14px) scale(.92); opacity: 0; }
 
@@ -326,3 +365,4 @@ dialog[open] { animation: rise .25s ease-out; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+#tracker { padding: 0 16px; }

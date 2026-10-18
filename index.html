@@ -66,11 +66,34 @@
           <div class="stamp">send your package</div>
           <p class="r-head">*** GET YOUR LINK ***</p>
           <div class="rule double"></div>
+          <div class="openat">
+            <label for="openAt">DON'T OPEN UNTIL</label>
+            <div class="openat-row">
+              <input type="datetime-local" id="openAt">
+              <button class="clear" id="clearOpenAt" type="button" hidden>clear</button>
+            </div>
+            <p class="hint">optional · leave empty and it opens right away</p>
+          </div>
           <button class="btn primary" id="gen" type="button">Generate Link</button>
           <button class="btn" id="preview" type="button">Preview</button>
           <div class="linkout" id="linkout" hidden>
-            <input id="linkfield" readonly aria-label="your package link">
-            <button class="btn" id="copy" type="button">Copy</button>
+            <p class="lo-label">send this link</p>
+            <div class="lo-row">
+              <input id="linkfield" readonly aria-label="your package link">
+              <button class="btn" id="copy" type="button">Copy</button>
+            </div>
+            <div id="trackout" hidden>
+              <p class="lo-label">your tracking link · keep it to yourself</p>
+              <div class="lo-row">
+                <input id="trackfield" readonly aria-label="your private tracking link">
+                <button class="btn" id="copyTrack" type="button">Copy</button>
+              </div>
+            </div>
+          </div>
+          <div class="sent" id="sent" hidden>
+            <div class="rule dashed"></div>
+            <div class="cols"><span>SENT PACKAGES</span><span>STATUS</span></div>
+            <ul id="sentList"></ul>
           </div>
           <div class="rule double"></div>
           <div class="barcode wide" data-seed="5"></div>
@@ -100,6 +123,7 @@
         </span>
       </button>
       <p class="tap" id="tap">tap to open</p>
+      <button class="clear" id="skipWait" type="button" hidden>skip the wait (preview only)</button>
     </section>
 
     <section id="goodies" class="goodies-wrap" hidden>
@@ -108,7 +132,26 @@
       <div class="goodies" id="goodieGrid"></div>
     </section>
 
-    <footer class="foot">made with care</footer>
+    <footer class="foot" id="vfoot">made with care</footer>
+  </main>
+
+  <!-- ============ TRACKING (sender only) ============ -->
+  <main id="tracker" hidden>
+    <article class="receipt track">
+      <h1 class="r-title">PACKAGE TRACKING</h1>
+      <p class="r-sub">only you have this link</p>
+      <div class="rule double"></div>
+      <dl class="t-rows">
+        <dt>TO</dt><dd id="tTo">…</dd>
+        <dt>SENT</dt><dd id="tSent">…</dd>
+        <dt>OPENS</dt><dd id="tOpens">…</dd>
+      </dl>
+      <div class="rule dashed"></div>
+      <div class="stamp pending" id="tStamp">checking…</div>
+      <p class="t-when" id="tWhen"></p>
+      <div class="rule double"></div>
+      <a class="btn" href="./">Send another package</a>
+    </article>
   </main>
 
   <dialog id="dlg"><form id="dlgForm" method="dialog"></form></dialog>

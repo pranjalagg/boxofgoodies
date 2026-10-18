@@ -5,6 +5,7 @@ import { ICONS, barcode } from './icons.js';
 const $ = (s) => document.querySelector(s);
 const MB = 1024 * 1024;
 const DRAFT_KEY = 'bog-draft-v1';
+const SENT_KEY = 'bog-sent-v1'; // packages sent from this browser, with their tracking tokens
 const BUCKET = 'attachments';
 const MAX_ITEMS = 20; // matches create_package() in supabase/migrations/004_limits.sql
 
@@ -99,6 +100,17 @@ const b64decode = (s) => {
   return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
 };
 
+const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+const fmtWhen = (d) => d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+// Value for a datetime-local input, in the viewer's own timezone.
+const localInputValue = (d) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+function countdown(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400), hh = Math.floor((s % 86400) / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+  const clock = `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  return d ? `${d} ${d === 1 ? 'day' : 'days'}, ${clock}` : clock;
+}
+
 let clientP;
 function getClient() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
@@ -108,7 +120,7 @@ function getClient() {
 }
 
 // ---------- state ----------
-const state = { to: '', from: '', items: [] };
+const state = { to: '', from: '', openAt: '', items: [] };
 const files = new Map(); // item id -> File (not persisted)
 
 function saveDraft() {
@@ -117,10 +129,16 @@ function saveDraft() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...state, items }));
   } catch {}
 }
+function loadSent() {
+  try { return JSON.parse(localStorage.getItem(SENT_KEY) || '[]'); } catch { return []; }
+}
+function saveSent(list) {
+  try { localStorage.setItem(SENT_KEY, JSON.stringify(list.slice(0, 30))); } catch {}
+}
 function loadDraft() {
   try {
     const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
-    if (d) Object.assign(state, { to: d.to || '', from: d.from || '', items: d.items || [] });
+    if (d) Object.assign(state, { to: d.to || '', from: d.from || '', openAt: d.openAt || '', items: d.items || [] });
   } catch {}
 }
 
@@ -286,15 +304,24 @@ function resetLink() {
   $('#linkout').hidden = true;
 }
 
+// The "don't open until" field holds local time; packages store it as UTC.
+function openAtISO() {
+  if (!state.openAt) return null;
+  const d = new Date(state.openAt);
+  return isNaN(d) ? null : d.toISOString();
+}
+
 async function generate() {
   if (!state.items.length) return toast('tuck at least one thing inside first');
+  const openAt = openAtISO();
+  if (openAt && new Date(openAt) <= new Date()) return toast("that \"don't open until\" time has already passed");
   const btn = $('#gen');
   btn.disabled = true;
   btn.textContent = 'packing…';
   try {
-    const pkg = { to: state.to, from: state.from, items: [] };
+    const pkg = { to: state.to, from: state.from, items: [], ...(openAt && { openAt }) };
     const base = location.origin + location.pathname;
-    let link;
+    let link, trackLink = null;
     const client = await getClient();
     if (client) {
       // The package row goes in first: the database only accepts uploads into the folder
@@ -313,7 +340,8 @@ async function generate() {
         }
         pkg.items.push(out);
       }
-      const { error } = await client.rpc('create_package', { pid: id, penv: ENV, pdata: pkg });
+      const token = randomToken();
+      const { error } = await client.rpc('create_package', { pid: id, penv: ENV, pdata: pkg, ptrack: token });
       if (error) throw error;
       for (const { path, f, label } of uploads) {
         btn.textContent = `uploading ${label}…`;
@@ -321,11 +349,16 @@ async function generate() {
         if (upErr) throw upErr;
       }
       link = `${base}?p=${id}`;
+      trackLink = `${base}?track=${id}.${token}`;
+      saveSent([{ id, token, to: state.to, createdAt: new Date().toISOString(), openAt }, ...loadSent()]);
+      renderSent();
     } else {
       pkg.items = state.items.map(({ local, fileName, ...rest }) => rest);
       link = `${base}#d=${b64encode(pkg)}`;
     }
     $('#linkfield').value = link;
+    $('#trackfield').value = trackLink || '';
+    $('#trackout').hidden = !trackLink;
     $('#linkout').hidden = false;
     $('#linkfield').select();
     toast('your package is ready to send');
@@ -338,7 +371,35 @@ async function generate() {
   }
 }
 
+function statusEl(st) {
+  if (!st) return h('span', { className: 's-status' }, 'unknown');
+  if (st.openedAt) return h('span', { className: 's-status opened' }, `opened ${fmtWhen(new Date(st.openedAt))}`);
+  if (st.openAt && new Date(st.openAt) > new Date()) return h('span', { className: 's-status' }, `sealed until ${fmtWhen(new Date(st.openAt))}`);
+  return h('span', { className: 's-status' }, 'not opened yet');
+}
+
+// Packages sent from this browser, with live opened/not-opened status.
+async function renderSent() {
+  const list = loadSent().slice(0, 10);
+  $('#sent').hidden = !list.length;
+  if (!list.length) return;
+  const rows = list.map((s) =>
+    h('li', {},
+      h('span', { className: 's-to' }, `to ${s.to || 'someone'}`),
+      h('span', { className: 's-status' }, '…'),
+      h('a', { className: 's-track', href: `?track=${s.id}.${s.token}` }, 'track')));
+  $('#sentList').replaceChildren(...rows);
+  const client = await getClient();
+  if (!client) return;
+  await Promise.all(list.map(async (s, i) => {
+    let data = null;
+    try { ({ data } = await client.rpc('get_status', { pid: s.id, ptrack: s.token })); } catch {}
+    rows[i].querySelector('.s-status').replaceWith(statusEl(data));
+  }));
+}
+
 function showEditor() {
+  clearInterval(sealTimer);
   document.body.className = 'mode-edit';
   $('#viewer').hidden = true;
   $('#editor').hidden = false;
@@ -352,6 +413,15 @@ function initEditor() {
   from.value = state.from;
   to.oninput = () => { state.to = to.value; saveDraft(); resetLink(); };
   from.oninput = () => { state.from = from.value; saveDraft(); resetLink(); };
+  const openAt = $('#openAt');
+  openAt.value = state.openAt;
+  const syncOpenAt = () => {
+    $('#clearOpenAt').hidden = !openAt.value;
+    openAt.min = localInputValue(new Date());
+  };
+  openAt.oninput = () => { state.openAt = openAt.value; saveDraft(); resetLink(); syncOpenAt(); };
+  $('#clearOpenAt').onclick = () => { openAt.value = ''; openAt.oninput(); };
+  syncOpenAt();
   $('#digits').textContent = '9405 5118 9956 ' + String(Math.random()).slice(2, 6) + ' 2345 67';
   renderCatalog();
   renderCart();
@@ -360,19 +430,47 @@ function initEditor() {
   $('#preview').onclick = () => {
     if (!state.items.length) return toast('tuck at least one thing inside first');
     const items = state.items.map((it) => (it.local ? { ...it, src: it.local, mime: files.get(it.id)?.type } : it));
-    showViewer({ to: state.to, from: state.from, items }, { preview: true });
+    showViewer({ to: state.to, from: state.from, openAt: openAtISO(), items }, { preview: true });
   };
   $('#copy').onclick = async () => {
     try { await navigator.clipboard.writeText($('#linkfield').value); toast('link copied'); }
     catch { $('#linkfield').select(); toast('press ⌘C / Ctrl+C to copy'); }
   };
+  $('#copyTrack').onclick = async () => {
+    try { await navigator.clipboard.writeText($('#trackfield').value); toast('tracking link copied'); }
+    catch { $('#trackfield').select(); toast('press ⌘C / Ctrl+C to copy'); }
+  };
+  renderSent();
   showEditor();
 }
 
 // ---------- viewer ----------
+let sealTimer;
+
+async function fetchPackage(id) {
+  const client = await getClient();
+  if (!client) throw new Error('no backend configured');
+  const { data, error } = await client.rpc('get_package', { pid: id });
+  if (error || !data) throw error || new Error('not found');
+  return { ...data, id };
+}
+
+// First real opening is recorded for the sender. Not from previews, not from the
+// sender's own browser (they'd otherwise mark it opened just by checking the link).
+async function markOpened(pkg) {
+  if (!pkg.id) return;
+  if (loadSent().some((s) => s.id === pkg.id)) {
+    toast("this is your own package, so opening it here doesn't count");
+    return;
+  }
+  try { await (await getClient())?.rpc('mark_opened', { pid: pkg.id }); } catch {}
+}
+
 function showViewer(pkg, { preview = false } = {}) {
+  clearInterval(sealTimer);
   document.body.className = 'mode-view';
   $('#editor').hidden = true;
+  $('#tracker').hidden = true;
   $('#viewer').hidden = false;
   $('#mail').hidden = false;
   $('#goodies').hidden = true;
@@ -380,6 +478,7 @@ function showViewer(pkg, { preview = false } = {}) {
 
   $('#mTo').textContent = pkg.to || 'you';
   $('#mFrom').textContent = pkg.from || 'someone who cares';
+  $('#vfoot').textContent = pkg.id && !preview ? 'the sender will see when this package is opened' : 'made with care';
 
   const back = $('#vback');
   if (preview) {
@@ -392,15 +491,65 @@ function showViewer(pkg, { preview = false } = {}) {
   }
 
   const parcel = $('#parcel');
+  const tap = $('#tap');
+  const skip = $('#skipWait');
   parcel.classList.remove('open');
-  parcel.disabled = false;
-  $('#tap').textContent = 'tap to open';
+  skip.hidden = true;
+
+  const unseal = () => {
+    clearInterval(sealTimer);
+    parcel.classList.remove('sealed');
+    parcel.disabled = false;
+    skip.hidden = true;
+    tap.textContent = 'tap to open';
+  };
+
   parcel.onclick = () => {
     parcel.classList.add('open');
     parcel.disabled = true;
+    if (!preview) markOpened(pkg);
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     setTimeout(() => renderGoodies(pkg), reduce ? 0 : 900);
   };
+
+  const until = pkg.openAt ? new Date(pkg.openAt) : null;
+  if (!until || isNaN(until) || until <= new Date()) {
+    if (pkg.sealed) { tap.textContent = 'unsealing…'; parcel.disabled = true; refetch(); return; }
+    unseal();
+    return;
+  }
+
+  // Sealed: show the sticker and a live countdown. With a backend the contents aren't
+  // even here yet (pkg.sealed); they're fetched once the time comes.
+  parcel.classList.add('sealed');
+  parcel.dataset.until = fmtWhen(until);
+  parcel.disabled = true;
+  const tick = () => {
+    const left = until - Date.now();
+    if (left > 0) { tap.textContent = `opens in ${countdown(left)}`; return; }
+    clearInterval(sealTimer);
+    if (pkg.sealed) refetch();
+    else unseal();
+  };
+  tick();
+  sealTimer = setInterval(tick, 1000);
+  if (preview) {
+    skip.hidden = false;
+    skip.onclick = unseal;
+  }
+
+  async function refetch() {
+    tap.textContent = 'unsealing…';
+    try {
+      const fresh = await fetchPackage(pkg.id);
+      if (fresh.sealed) { setTimeout(refetch, 5000); return; } // clocks a few seconds apart
+      pkg = fresh;
+      unseal();
+    } catch (e) {
+      console.error(e);
+      tap.textContent = "couldn't unseal it, try reloading";
+    }
+  }
 }
 
 function renderGoodies(pkg) {
@@ -497,6 +646,42 @@ function openItem(it) {
   dlg.showModal();
 }
 
+// ---------- tracking (sender only) ----------
+async function showTracker(param) {
+  document.body.className = 'mode-edit';
+  $('#tracker').hidden = false;
+  const [id, token] = param.split('.');
+  const stamp = $('#tStamp');
+  try {
+    const client = await getClient();
+    if (!client || !id || !token) throw new Error('bad link');
+    const { data, error } = await client.rpc('get_status', { pid: id, ptrack: token });
+    if (error || !data) throw error || new Error('not found');
+    $('#tTo').textContent = data.to || 'someone';
+    $('#tSent').textContent = fmtWhen(new Date(data.createdAt));
+    const openAt = data.openAt ? new Date(data.openAt) : null;
+    $('#tOpens').textContent = openAt ? fmtWhen(openAt) : 'right away';
+    if (data.openedAt) {
+      stamp.textContent = 'OPENED';
+      stamp.className = 'stamp opened';
+      $('#tWhen').textContent = fmtWhen(new Date(data.openedAt));
+    } else if (openAt && openAt > new Date()) {
+      stamp.textContent = 'SEALED';
+      $('#tWhen').textContent = `they can open it from ${fmtWhen(openAt)}`;
+    } else {
+      stamp.textContent = 'NOT OPENED YET';
+      $('#tWhen').textContent = "we'll stamp it the moment they open it";
+    }
+    // Remember it on this device too, so it shows up under "sent packages".
+    const list = loadSent();
+    if (!list.some((s) => s.id === id)) saveSent([{ id, token, to: data.to, createdAt: data.createdAt, openAt: data.openAt }, ...list]);
+  } catch (e) {
+    console.error(e);
+    stamp.textContent = 'NOT FOUND';
+    $('#tWhen').textContent = 'check that you copied the whole tracking link';
+  }
+}
+
 // ---------- boot ----------
 async function boot() {
   paintBarcodes();
@@ -504,7 +689,9 @@ async function boot() {
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
   dlg.addEventListener('close', () => dlg.querySelectorAll('video, iframe').forEach((m) => m.remove()));
 
-  const id = new URLSearchParams(location.search).get('p');
+  const params = new URLSearchParams(location.search);
+  if (params.get('track')) return showTracker(params.get('track'));
+  const id = params.get('p');
   const hash = location.hash.startsWith('#d=') ? location.hash.slice(3) : null;
 
   if (!id && !hash) return initEditor();
@@ -517,11 +704,7 @@ async function boot() {
     let pkg;
     if (hash) pkg = b64decode(hash);
     else {
-      const client = await getClient();
-      if (!client) throw new Error('no backend configured');
-      const { data, error } = await client.rpc('get_package', { pid: id });
-      if (error || !data) throw error || new Error('not found');
-      pkg = data;
+      pkg = await fetchPackage(id);
     }
     showViewer(pkg);
   } catch (e) {
