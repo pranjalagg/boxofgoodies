@@ -126,7 +126,7 @@ function paintBarcodes(root = document) {
 function renderCatalog() {
   $('#catalog').replaceChildren(
     ...Object.entries(TYPES).map(([type, T]) =>
-      h('button', { type: 'button', className: 'add', onclick: () => openAdd(type) },
+      h('button', { type: 'button', className: 'add', onclick: () => openForm(type) },
         iconEl(type), h('span', {}, `+ ${T.label}`)))
   );
 }
@@ -138,23 +138,31 @@ function summary(it) {
   return it.caption || it.fileName || it.url || '';
 }
 
+// Receipt-style cart: one line per type with its quantity, items indented underneath.
 function renderCart() {
   const cart = $('#cart');
   if (!state.items.length) {
     cart.replaceChildren(h('li', { className: 'empty' }, 'nothing tucked in yet'));
     return;
   }
-  cart.replaceChildren(
-    ...state.items.map((it) =>
-      h('li', {},
-        h('span', { className: 'ci' }, TYPES[it.type].label.toUpperCase()),
-        h('span', { className: 'cd' }, summary(it)),
-        h('span', { className: 'cq' }, '1'),
-        h('button', {
-          type: 'button', className: 'rm', title: 'Remove', ariaLabel: `Remove ${TYPES[it.type].label}`,
-          onclick: () => removeItem(it.id),
-        }, '×')))
-  );
+  const rows = [];
+  for (const [type, T] of Object.entries(TYPES)) {
+    const group = state.items.filter((it) => it.type === type);
+    if (!group.length) continue;
+    rows.push(h('li', { className: 'group' },
+      h('span', { className: 'ci' }, T.label.toUpperCase()),
+      h('span', { className: 'leader', ariaHidden: 'true' }),
+      h('span', { className: 'cq', ariaLabel: `quantity ${group.length}` }, `×${group.length}`)));
+    group.forEach((it, n) => {
+      const name = `${T.label} ${n + 1}`;
+      rows.push(h('li', { className: 'sub' },
+        h('button', { type: 'button', className: 'cd', title: 'Edit', onclick: () => openForm(type, it) },
+          summary(it) || name),
+        h('button', { type: 'button', className: 'ed', ariaLabel: `Edit ${name}`, onclick: () => openForm(type, it) }, 'edit'),
+        h('button', { type: 'button', className: 'rm', title: 'Remove', ariaLabel: `Remove ${name}`, onclick: () => removeItem(it.id) }, '×')));
+    });
+  }
+  cart.replaceChildren(...rows);
 }
 
 function removeItem(id) {
@@ -167,17 +175,23 @@ function removeItem(id) {
   resetLink();
 }
 
-function fieldEl(f) {
+function fieldEl(f, item) {
   const props = { name: f.k, placeholder: f.ph || '' };
   let input;
   if (f.type === 'textarea') input = h('textarea', { ...props, rows: 5 });
   else input = h('input', { ...props, type: f.type || 'text', accept: f.type === 'file' ? f.accept : null });
-  if (f.req) input.required = true;
+  const keepsFile = f.type === 'file' && item && files.has(item.id);
+  if (f.req && !keepsFile) input.required = true;
   if (f.max) input.maxLength = f.max;
-  return h('label', { className: 'field' }, h('span', {}, f.label), input);
+  if (item && f.type !== 'file') input.value = item[f.k] || '';
+  return h('label', { className: 'field' },
+    h('span', {}, f.label),
+    input,
+    keepsFile ? h('small', { className: 'keep' }, `current: ${item.fileName} (pick a new one to replace it)`) : null);
 }
 
-function openAdd(type) {
+// Add a new item, or edit `item` in place when given.
+function openForm(type, item = null) {
   const T = TYPES[type];
   const form = $('#dlgForm');
   const dlg = $('#dlg');
@@ -188,11 +202,11 @@ function openAdd(type) {
   dlg.className = '';
   form.replaceChildren(
     h('button', { type: 'button', className: 'x', ariaLabel: 'Close', onclick: () => dlg.close() }, '×'),
-    h('h3', { className: 'dlg-title' }, `ADD ${T.label.toUpperCase()}`),
-    ...T.fields.map(fieldEl),
+    h('h3', { className: 'dlg-title' }, `${item ? 'EDIT' : 'ADD'} ${T.label.toUpperCase()}`),
+    ...T.fields.map((f) => fieldEl(f, item)),
     err,
     h('div', { className: 'row' },
-      h('button', { type: 'submit', className: 'btn primary' }, 'Add to package'),
+      h('button', { type: 'submit', className: 'btn primary' }, item ? 'Save changes' : 'Add to package'),
       h('button', { type: 'button', className: 'btn', onclick: () => dlg.close() }, 'Cancel')),
   );
   form.onsubmit = (e) => {
@@ -208,16 +222,22 @@ function openAdd(type) {
         data.file = file;
       } else if (el.value.trim()) data[f.k] = el.value.trim();
     }
-    const msg = T.validate?.(data);
+    const keptFile = !file && item && files.has(item.id);
+    const msg = T.validate?.({ ...data, file: file || keptFile });
     if (msg) { err.textContent = msg; return; }
     delete data.file;
-    const item = { id: rid(), type, ...data };
+    const next = { id: item?.id || rid(), type, ...data };
     if (file) {
-      files.set(item.id, file);
-      item.local = URL.createObjectURL(file);
-      item.fileName = file.name;
+      if (item?.local) URL.revokeObjectURL(item.local);
+      files.set(next.id, file);
+      next.local = URL.createObjectURL(file);
+      next.fileName = file.name;
+    } else if (keptFile) {
+      next.local = item.local;
+      next.fileName = item.fileName;
     }
-    state.items.push(item);
+    if (item) state.items[state.items.findIndex((i) => i.id === item.id)] = next;
+    else state.items.push(next);
     renderCart();
     saveDraft();
     resetLink();
