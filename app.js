@@ -63,7 +63,8 @@ let iconSeq = 0;
 const iconEl = (type, cls = 'icon') => {
   const s = h('span', { className: cls });
   const n = ++iconSeq;
-  s.innerHTML = ICONS[type].replace(/(id="|url\(#)([\w-]+)/g, `$1$2-${n}`);
+  // Inner .float layer carries the idle float, so it doesn't fight hover/pop transforms.
+  s.innerHTML = `<span class="float">${ICONS[type].replace(/(id="|url\(#)([\w-]+)/g, `$1$2-${n}`)}</span>`;
   return s;
 };
 const rid = () => crypto.randomUUID().slice(0, 8);
