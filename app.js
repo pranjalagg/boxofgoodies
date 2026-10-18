@@ -185,6 +185,26 @@ function paintBarcodes(root = document) {
   });
 }
 
+// ---------- easter eggs ----------
+// The label's tracking number spells a message on a phone keypad: I MISS YOU, I LOVE YOU, THINKING.
+const SECRET_NUMBERS = ['4647 7968', '4568 3968', '8446 5464'];
+const secretTracking = () => `9405 5118 ${SECRET_NUMBERS[Math.floor(Math.random() * SECRET_NUMBERS.length)]} 2345 67`;
+
+// Clicking the "ready to ship" stamp stamps it again, at a new angle. The tenth time, it gives up.
+function stampSpam(el) {
+  let n = 0;
+  el.addEventListener('click', () => {
+    n += 1;
+    el.style.setProperty('--tilt', `${(Math.random() * 10 - 6).toFixed(1)}deg`);
+    el.classList.remove('restamp');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('restamp');
+    if (n === 10) el.textContent = "OK OK, IT'S STAMPED";
+  });
+}
+
+let undoCount = 0; // emptying the cart and changing your mind, repeatedly
+
 // ---------- editor ----------
 function renderCatalog() {
   $('#catalog').replaceChildren(
@@ -266,6 +286,7 @@ function emptyCart() {
       renderCart();
       saveDraft();
       resetLink();
+      if (++undoCount === 3) setTimeout(() => toast('packing is hard. take your time.'), 400);
     },
     expire: () => items.forEach((i) => i.local && URL.revokeObjectURL(i.local)),
   });
@@ -414,7 +435,7 @@ function fieldEl(f, item) {
 
 // Add a new item, or edit `item` in place when given.
 function openForm(type, item = null) {
-  if (!item && state.items.length >= MAX_ITEMS) return toast(`a box holds up to ${MAX_ITEMS} things`);
+  if (!item && state.items.length >= MAX_ITEMS) return toast(`this box is now structurally unsound (${MAX_ITEMS} things max)`);
   const T = TYPES[type];
   const form = $('#dlgForm');
   const dlg = $('#dlg');
@@ -604,7 +625,8 @@ function initEditor() {
   openAt.oninput = () => { state.openAt = openAt.value; saveDraft(); resetLink(); syncOpenAt(); };
   $('#clearOpenAt').onclick = () => { openAt.value = ''; openAt.oninput(); };
   syncOpenAt();
-  $('#digits').textContent = '9405 5118 9956 ' + String(Math.random()).slice(2, 6) + ' 2345 67';
+  $('#digits').textContent = secretTracking();
+  stampSpam($('.share .stamp'));
   renderCatalog();
   renderCart();
   $('#gen').onclick = generate;
@@ -660,6 +682,9 @@ function showViewer(pkg, { preview = false } = {}) {
 
   $('#mTo').textContent = pkg.to || 'you';
   $('#ymail').textContent = pkg.to ? `special delivery for ${pkg.to}` : 'special delivery';
+  const late = new Date().getHours() < 4; // midnight to 4am
+  $('#ymail').classList.toggle('late', late);
+  if (late) $('#ymail').textContent = `it's late${pkg.to ? `, ${pkg.to}` : ''}. this'll keep till morning (but go on)`;
   $('#mFrom').textContent = pkg.from || 'someone who cares';
   $('#vfoot').textContent = pkg.id && !preview ? 'the sender will see when this package is opened' : 'made with care';
 

@@ -447,3 +447,12 @@ dialog[open] { animation: rise .25s ease-out; }
 .clipping h4 { font: 700 clamp(24px, 5vw, 30px)/1.12 var(--serif); margin: 0 0 10px; overflow-wrap: anywhere; }
 .n-note { font: 500 italic 19px/1.4 var(--serif); margin: 0 0 14px; }
 .clipping .btn { display: inline-block; width: auto; }
+
+/* ---------- easter eggs ---------- */
+/* stamp spam */
+.share .stamp { cursor: pointer; user-select: none; transform: rotate(var(--tilt, -2.5deg)); }
+.stamp.restamp { animation: restamp .22s ease-out; }
+@keyframes restamp { from { transform: scale(1.35) rotate(var(--tilt, -2.5deg)); opacity: .15; } }
+
+/* late-night heading is a sentence, not a title */
+.ymail.late { font-size: clamp(24px, 5vw, 32px); max-width: 560px; text-wrap: balance; }
