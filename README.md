@@ -7,11 +7,11 @@ Plain HTML/CSS/JS with no build step. Supabase stores packages and uploaded phot
 ## Run locally
 
 ```sh
-python3 -m http.server 8000
+python3 serve.py
 # open http://localhost:8000
 ```
 
-(ES modules don't load from `file://`, so you need a local server.)
+`serve.py` is `python3 -m http.server` with caching turned off, listening on localhost only. Plain `http.server` lets the browser reuse old CSS and JS after you edit them. (ES modules don't load from `file://`, so you do need a server.)
 
 If `config.js` is empty, the app runs without a backend. Links then carry the whole package in the URL, and photo/video uploads are turned off. Song and YouTube links still work.
 
@@ -83,7 +83,8 @@ Don't use "Deploy from a branch". That would serve the committed `env.js`, and r
 | `env.js` | `dev` in the repo; the deploy workflow sets it to `prod` |
 | `supabase/schema.sql` | base table, read function, storage bucket |
 | `supabase/migrations/` | dev/prod tag (002), dashboard views (003), abuse limits (004) |
-| `.github/workflows/pages.yml` | deploys to GitHub Pages as `prod` |
+| `.github/workflows/pages.yml` | deploys to GitHub Pages as `prod`, with versioned asset URLs |
+| `serve.py` | local dev server without caching |
 
 ## Adding more item types
 

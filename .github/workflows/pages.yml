@@ -27,6 +27,15 @@ jobs:
       - name: Mark build as production
         run: echo "export const ENV = 'prod';" > env.js
 
+      # Pages lets browsers cache files for 10 minutes; versioned URLs stop a fresh
+      # app.js from running against a stale styles.css (or the other way round).
+      - name: Version asset URLs
+        run: |
+          v="${GITHUB_SHA::8}"
+          sed -i -E "s#(href=\"styles\.css|src=\"app\.js)\"#\1?v=$v\"#" index.html
+          sed -i -E "s#from '\./([a-z]+)\.js'#from './\1.js?v=$v'#" app.js
+          grep -n "?v=" index.html app.js
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

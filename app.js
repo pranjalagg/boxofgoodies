@@ -73,13 +73,19 @@ const safeUrl = (u) => {
     return ['https:', 'http:', 'blob:'].includes(url.protocol) ? url.href : null;
   } catch { return null; }
 };
-let toastTimer;
-function toast(msg) {
+let toastTimer, toastExpire;
+// action: { label, run, expire } adds a button (e.g. undo); expire runs once it's no longer offered.
+function toast(msg, action = null) {
   const t = $('#toast');
-  t.textContent = msg;
+  toastExpire?.();
+  toastExpire = action?.expire || null;
+  const hide = () => { t.classList.remove('show'); toastExpire?.(); toastExpire = null; };
+  t.replaceChildren(msg, action
+    ? h('button', { type: 'button', className: 'toast-act', onclick: () => { toastExpire = null; action.run(); hide(); } }, action.label)
+    : '');
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  toastTimer = setTimeout(hide, action ? 6000 : 3200);
 }
 const b64encode = (obj) => {
   const bytes = new TextEncoder().encode(JSON.stringify(obj));
@@ -143,6 +149,7 @@ function summary(it) {
 // Receipt-style cart: one line per type with its quantity, items indented underneath.
 function renderCart() {
   const cart = $('#cart');
+  $('#emptyCart').hidden = !state.items.length;
   if (!state.items.length) {
     cart.replaceChildren(h('li', { className: 'empty' }, 'nothing tucked in yet'));
     return;
@@ -175,6 +182,30 @@ function removeItem(id) {
   renderCart();
   saveDraft();
   resetLink();
+}
+
+// One click, no confirm dialog: the toast offers undo instead. Blob previews are only
+// released once undo is no longer possible.
+function emptyCart() {
+  if (!state.items.length) return;
+  const items = state.items;
+  const kept = new Map(files);
+  state.items = [];
+  files.clear();
+  renderCart();
+  saveDraft();
+  resetLink();
+  toast(`cart emptied (${items.length} ${items.length === 1 ? 'thing' : 'things'})`, {
+    label: 'undo',
+    run: () => {
+      state.items = [...items, ...state.items];
+      kept.forEach((f, id) => files.set(id, f));
+      renderCart();
+      saveDraft();
+      resetLink();
+    },
+    expire: () => items.forEach((i) => i.local && URL.revokeObjectURL(i.local)),
+  });
 }
 
 function fieldEl(f, item) {
@@ -324,6 +355,7 @@ function initEditor() {
   renderCatalog();
   renderCart();
   $('#gen').onclick = generate;
+  $('#emptyCart').onclick = emptyCart;
   $('#preview').onclick = () => {
     if (!state.items.length) return toast('tuck at least one thing inside first');
     const items = state.items.map((it) => (it.local ? { ...it, src: it.local, mime: files.get(it.id)?.type } : it));

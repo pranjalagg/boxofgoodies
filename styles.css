@@ -146,7 +146,7 @@ button { font: inherit; color: inherit; }
 }
 .cart .cd::before { content: "– "; color: #aaa; }
 .cart .cd:hover { color: var(--ink); text-decoration: underline dotted; text-underline-offset: 3px; }
-.ed { background: none; border: 0; cursor: pointer; font: 10px var(--mono); color: var(--red-ink); padding: 2px 5px; border-radius: 4px; opacity: .55; }
+.ed { background: none; border: 0; cursor: pointer; font: 11px var(--mono); color: var(--red-ink); padding: 2px 5px; border-radius: 4px; opacity: .8; }
 .cart li.sub:hover .ed, .ed:focus-visible { opacity: 1; }
 .ed:hover { background: var(--blush); }
 .rm { background: none; border: 0; cursor: pointer; font-size: 15px; line-height: 1; color: var(--red); padding: 2px; border-radius: 4px; }
@@ -291,7 +291,17 @@ dialog[open] { animation: rise .25s ease-out; }
   background: #2b211b; color: #f7efe4; font: 12px var(--mono); padding: 10px 16px; border-radius: 8px;
   max-width: calc(100vw - 32px); transition: opacity .25s, transform .25s; z-index: 20;
 }
-.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast-act {
+  margin-left: 12px; background: none; border: 0; padding: 0; cursor: pointer;
+  font: 700 12px var(--mono); color: #f3b8b3; text-decoration: underline; text-underline-offset: 3px;
+}
+.toast-act:hover { color: #fff; }
+.clear {
+  background: none; border: 0; cursor: pointer; padding: 1px 5px; margin-left: 6px; border-radius: 4px;
+  font: 11px var(--mono); letter-spacing: 0; color: var(--red-ink); text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.clear:hover { background: var(--blush); text-decoration: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
