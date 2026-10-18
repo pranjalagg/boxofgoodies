@@ -26,6 +26,17 @@ If `config.js` is empty, the app runs without a backend. Links then carry the wh
 
 The anon key is safe to ship in the frontend. What it can do is limited by the policies in the schema.
 
+If you set up the database before the dev/prod split, also run `supabase/migrations/002_env.sql`.
+
+### Test data vs real data
+
+Packages made from `localhost` / `127.0.0.1` are tagged `env = 'dev'`, and their uploads go under `dev/` in the `attachments` bucket. Packages made on the deployed site are tagged `prod`, with uploads under `prod/`.
+
+- See real packages only: `select * from packages where env = 'prod';`
+- Wipe test packages: `delete from packages where env = 'dev';`, then in **Storage → attachments** delete the `dev` folder.
+
+The tag is a label, not a security boundary. Anyone can send packages to the backend, so don't rely on `env` to keep anything secret.
+
 ## Deploy
 
 **Vercel:** push to GitHub, then in Vercel choose *Add New → Project*, import the repo, and keep the defaults (no framework, no build command). Or run `npx vercel` in this folder.

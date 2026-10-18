@@ -3,9 +3,12 @@
 -- Packages: anyone can create one; reading needs the exact id (no listing).
 create table if not exists public.packages (
   id uuid primary key,
+  env text not null default 'prod' check (env in ('dev', 'prod')), -- 'dev' = made from localhost
   data jsonb not null,
   created_at timestamptz not null default now()
 );
+
+create index if not exists packages_env_idx on public.packages (env);
 
 alter table public.packages enable row level security;
 
@@ -29,6 +32,7 @@ revoke all on function public.get_package(uuid) from public;
 grant execute on function public.get_package(uuid) to anon, authenticated;
 
 -- Attachments: public-read bucket (files served by unguessable URL), 50MB cap, images/videos only.
+-- Files live under dev/<package id>/ or prod/<package id>/.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('attachments', 'attachments', true, 52428800, array['image/*', 'video/*'])
 on conflict (id) do update
@@ -39,4 +43,7 @@ on conflict (id) do update
 drop policy if exists "anon can upload attachments" on storage.objects;
 create policy "anon can upload attachments"
   on storage.objects for insert to anon
-  with check (bucket_id = 'attachments');
+  with check (
+    bucket_id = 'attachments'
+    and (storage.foldername(name))[1] in ('dev', 'prod')
+  );

@@ -1,4 +1,4 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, ENV } from './config.js';
 import { ICONS, barcode } from './icons.js';
 
 const $ = (s) => document.querySelector(s);
@@ -249,7 +249,7 @@ async function generate() {
         if (f) {
           btn.textContent = `uploading ${TYPES[it.type].label.toLowerCase()}…`;
           const ext = (f.name.split('.').pop() || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 8);
-          const path = `${id}/${it.id}.${ext}`;
+          const path = `${ENV}/${id}/${it.id}.${ext}`;
           const { error } = await client.storage.from(BUCKET).upload(path, f, { contentType: f.type });
           if (error) throw error;
           out.src = client.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
@@ -257,7 +257,7 @@ async function generate() {
         }
         pkg.items.push(out);
       }
-      const { error } = await client.from('packages').insert({ id, data: pkg });
+      const { error } = await client.from('packages').insert({ id, env: ENV, data: pkg });
       if (error) throw error;
       link = `${base}?p=${id}`;
     } else {
