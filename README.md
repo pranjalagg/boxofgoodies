@@ -18,19 +18,32 @@ If `config.js` is empty, the app runs without a backend. Links then carry the wh
 ## Set up Supabase (needed for uploads and short links)
 
 1. Create a free project at https://supabase.com.
-2. Open **SQL Editor**, paste `supabase/schema.sql`, and run it. This creates:
-   - the `packages` table, which anyone can insert into but nobody can list
-   - the `get_package(id)` function, used to read a single package
+2. Open **SQL Editor** and run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (002, 003, 004). Each file is safe to re-run. Together they create:
+   - the `packages` table, which nobody can list or write to directly
+   - `create_package(...)`, the only way to add a package, with the limits below
+   - `get_package(id)`, used to read a single package
    - a public `attachments` storage bucket (50 MB per file, images and videos only)
+   - read-only dashboard views in the `admin` schema
 3. Go to **Project Settings → API**, copy the Project URL and the `anon` public key, and paste them into `config.js`.
 
 The anon key is safe to ship in the frontend. What it can do is limited by the policies in the schema.
 
-If you set up the database before the dev/prod split, also run `supabase/migrations/002_env.sql`.
+If your database is already set up, just run the migrations you haven't run yet.
+
+### Limits
+
+Enforced in the database, because anyone holding the public key can skip the app and call the backend directly:
+
+- 1–20 items per package, about 200 KB of text
+- 10 packages per hour per IP (stored as a hash, never the raw IP)
+- 500 packages per day across everyone
+- uploads only into the folder of a package created in the last 15 minutes, at most 20 files each, 50 MB per file
+
+The per-IP limit is best effort: a determined sender can fake the header it relies on. The daily cap holds regardless. Adjust the numbers in `004_limits.sql` and re-run it.
 
 ### Test data vs real data
 
-Packages made from `localhost` / `127.0.0.1` are tagged `env = 'dev'`, and their uploads go under `dev/` in the `attachments` bucket. Packages made on the deployed site are tagged `prod`, with uploads under `prod/`.
+`env.js` decides the tag. In the repo it says `dev`, so anything you create while testing locally is tagged `env = 'dev'`, with uploads under `dev/` in the `attachments` bucket. The GitHub Pages workflow rewrites it to `prod` when it deploys, so only the live site creates `prod` packages, with uploads under `prod/`. The database also defaults to `dev`.
 
 - See real packages only: `select * from packages where env = 'prod';`
 - Wipe test packages: `delete from packages where env = 'dev';`, then in **Storage → attachments** delete the `dev` folder.
@@ -51,9 +64,12 @@ Every view has an `env` column, so you can filter to `prod` in the dashboard. Th
 
 ## Deploy
 
-**Vercel:** push to GitHub, then in Vercel choose *Add New → Project*, import the repo, and keep the defaults (no framework, no build command). Or run `npx vercel` in this folder.
+GitHub Pages, through `.github/workflows/pages.yml`:
 
-**GitHub Pages:** push to GitHub, open *Settings → Pages*, and set the source to deploy from the branch root.
+1. On GitHub, open the repo's **Settings → Pages** and set **Source** to **GitHub Actions**.
+2. Push to `main`. The workflow sets `env.js` to `prod` and publishes the site to `https://<user>.github.io/boxofgoodies/`.
+
+Don't use "Deploy from a branch". That would serve the committed `env.js`, and real users' packages would be tagged `dev`.
 
 ## Files
 
@@ -64,7 +80,10 @@ Every view has an `env` column, so you can filter to `prod` in the dashboard. Th
 | `icons.js` | SVG artwork for each item, plus the barcode generator |
 | `styles.css` | cardboard, receipt paper, shipping label, stamp, parcel |
 | `config.js` | Supabase URL and anon key |
-| `supabase/schema.sql` | table, read function, storage bucket and policies |
+| `env.js` | `dev` in the repo; the deploy workflow sets it to `prod` |
+| `supabase/schema.sql` | base table, read function, storage bucket |
+| `supabase/migrations/` | dev/prod tag (002), dashboard views (003), abuse limits (004) |
+| `.github/workflows/pages.yml` | deploys to GitHub Pages as `prod` |
 
 ## Adding more item types
 

@@ -1,10 +1,12 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY, ENV } from './config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { ENV } from './env.js';
 import { ICONS, barcode } from './icons.js';
 
 const $ = (s) => document.querySelector(s);
 const MB = 1024 * 1024;
 const DRAFT_KEY = 'bog-draft-v1';
 const BUCKET = 'attachments';
+const MAX_ITEMS = 20; // matches create_package() in supabase/migrations/004_limits.sql
 
 const TYPES = {
   note: {
@@ -192,6 +194,7 @@ function fieldEl(f, item) {
 
 // Add a new item, or edit `item` in place when given.
 function openForm(type, item = null) {
+  if (!item && state.items.length >= MAX_ITEMS) return toast(`a box holds up to ${MAX_ITEMS} things`);
   const T = TYPES[type];
   const form = $('#dlgForm');
   const dlg = $('#dlg');
@@ -262,23 +265,29 @@ async function generate() {
     let link;
     const client = await getClient();
     if (client) {
+      // The package row goes in first: the database only accepts uploads into the folder
+      // of a package created moments ago, and that's also where rate limits are checked.
       const id = crypto.randomUUID();
+      const uploads = [];
       for (const it of state.items) {
         const { local, fileName, ...out } = it;
         const f = files.get(it.id);
         if (f) {
-          btn.textContent = `uploading ${TYPES[it.type].label.toLowerCase()}…`;
           const ext = (f.name.split('.').pop() || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 8);
           const path = `${ENV}/${id}/${it.id}.${ext}`;
-          const { error } = await client.storage.from(BUCKET).upload(path, f, { contentType: f.type });
-          if (error) throw error;
           out.src = client.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
           out.mime = f.type;
+          uploads.push({ path, f, label: TYPES[it.type].label.toLowerCase() });
         }
         pkg.items.push(out);
       }
-      const { error } = await client.from('packages').insert({ id, env: ENV, data: pkg });
+      const { error } = await client.rpc('create_package', { pid: id, penv: ENV, pdata: pkg });
       if (error) throw error;
+      for (const { path, f, label } of uploads) {
+        btn.textContent = `uploading ${label}…`;
+        const { error: upErr } = await client.storage.from(BUCKET).upload(path, f, { contentType: f.type });
+        if (upErr) throw upErr;
+      }
       link = `${base}?p=${id}`;
     } else {
       pkg.items = state.items.map(({ local, fileName, ...rest }) => rest);
